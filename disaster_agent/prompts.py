@@ -56,9 +56,14 @@ STRICT RULES:
   1. Return ONLY a complete Python script inside a single ```python ... ``` block.
   2. The script uses the variable DATA_DIR (string, already defined) to load data:
        import pandas as pd
-       train = pd.read_csv(f"{{DATA_DIR}}/train.csv")
-       test  = pd.read_csv(f"{{DATA_DIR}}/test.csv")
-  3. Use an 80/20 stratified train/val split with random_state=42.
+       df_train = pd.read_csv(f"{{DATA_DIR}}/train.csv")
+       df_test  = pd.read_csv(f"{{DATA_DIR}}/test.csv")
+  3. Use this exact data splitting code:
+       from sklearn.model_selection import train_test_split
+       X = df_train["text"]
+       y = df_train["target"]
+       X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+       X_test = df_test["text"]
   4. At the very end, print EXACTLY this line (replace X.XXXX with your value):
        print(f"RESULT: f1={{val_f1:.4f}}")
   5. For Keras models: max 5 epochs, use early stopping (patience=2).
