@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+.venv/
+venv/
+
+# Large data files — download separately via Kaggle
+train.csv
+test.csv
+sample_submission.csv
+submission.csv
+
+# Agent outputs that change every run
+experiments.json
+analysis.txt
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
