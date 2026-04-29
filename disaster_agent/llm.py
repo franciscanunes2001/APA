@@ -4,6 +4,7 @@ Swap MODEL_NAME to change the local model without touching anything else.
 """
 
 import os
+from typing import Optional
 from openai import OpenAI
 
 # ── Configuration ────────────────────────────────────────────────────────────
@@ -17,7 +18,7 @@ def get_client() -> OpenAI:
     return OpenAI(base_url=OLLAMA_BASE_URL, api_key="ollama")
 
 
-def call_llm(prompt: str, system: str | None = None) -> str:
+def call_llm(prompt: str, system: Optional[str] = None) -> str:
     """Send a prompt and return the raw text response."""
     client = get_client()
 
