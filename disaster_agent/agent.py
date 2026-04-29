@@ -18,7 +18,6 @@ The loop:
 import argparse
 import textwrap
 from pathlib import Path
-import tensorflow as tf
 
 from .llm import call_llm
 from .parser import extract_code, extract_architecture_name, extract_f1
@@ -54,7 +53,6 @@ TRAIN_SPLIT = 0.8
 VAL_SPLIT = 0.2
 STEPS_PER_EPOCH = int(NUM_TRAINING_EXAMPLES * TRAIN_SPLIT) // BATCH_SIZE
 EPOCHS = 2
-AUTO = tf.data.experimental.AUTOTUNE
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
