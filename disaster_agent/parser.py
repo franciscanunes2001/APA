@@ -3,9 +3,10 @@ Extracts structured data from LLM responses.
 """
 
 import re
+from typing import Optional
 
 
-def extract_code(response: str) -> str | None:
+def extract_code(response: str) -> Optional[str]:
     """
     Pull the first ```python ... ``` block out of an LLM response.
     Returns the code string, or None if no block found.
@@ -35,7 +36,7 @@ def extract_architecture_name(response: str) -> str:
     return "unknown"
 
 
-def extract_f1(output: str) -> float | None:
+def extract_f1(output: str) -> Optional[float]:
     """
     Parse the mandatory output line:   RESULT: f1=0.7823
     Returns the float value, or None if not found.
