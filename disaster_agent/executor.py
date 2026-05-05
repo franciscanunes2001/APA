@@ -2,36 +2,74 @@
 Sandboxed code executor.
 Writes generated code to a temp file and runs it in a subprocess
 with a timeout. Captures stdout/stderr. Never uses eval/exec.
+
+Injects a preamble with:
+  - DATA_DIR (path to data files)
+  - clean_text(text)
+  - make_features(df)
+so the LLM never has to redefine them and never trips a NameError.
 """
 
 import os
 import sys
 import subprocess
 import tempfile
-import textwrap
 from pathlib import Path
 
 
 TIMEOUT_SECONDS = 240  # 4 minutes hard cap per experiment
 
 
+# Injected at the top of every generated script. Saves ~80 lines of LLM
+# output budget per experiment AND eliminates `NameError: make_features
+# is not defined` and `df['keywor...` truncation bugs.
+PREAMBLE_TEMPLATE = '''\
+# ── Auto-injected by executor.py ────────────────────────────────────────────
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+DATA_DIR = {data_dir!r}
+
+import re as _re
+
+_CONTRACTIONS = {{
+    "don't":"do not","doesn't":"does not","didn't":"did not","won't":"will not",
+    "can't":"cannot","couldn't":"could not","isn't":"is not","aren't":"are not",
+    "wasn't":"was not","weren't":"were not","it's":"it is","i'm":"i am",
+    "i've":"i have","i'll":"i will","i'd":"i would","you're":"you are",
+    "you've":"you have","you'll":"you will","you'd":"you would",
+    "he's":"he is","she's":"she is","we're":"we are","we've":"we have",
+    "we'll":"we will","they're":"they are","they've":"they have",
+    "they'll":"they will","that's":"that is","what's":"what is",
+    "there's":"there is","let's":"let us","who's":"who is",
+}}
+
+def clean_text(text):
+    text = str(text).lower()
+    text = _re.sub(r'https?://\\S+|www\\.\\S+', '', text)
+    text = _re.sub(r'<.*?>', '', text)
+    text = _re.sub(r'[^\\x00-\\x7F]+', '', text)
+    for k, v in _CONTRACTIONS.items():
+        text = text.replace(k, v)
+    text = _re.sub(r'[^a-z\\s]', ' ', text)
+    text = _re.sub(r'\\s+', ' ', text).strip()
+    return text
+
+def make_features(df):
+    kw  = df['keyword'].fillna('').apply(clean_text)
+    txt = df['text'].fillna('').apply(clean_text)
+    return (kw + ' ' + txt).str.strip()
+# ── End preamble ────────────────────────────────────────────────────────────
+
+'''
+
+
 def run_code(code: str, data_dir: str) -> dict:
     """
-    Execute `code` as a standalone Python script.
-
-    Prepends `DATA_DIR = "<data_dir>"` so the script can use it directly.
-
-    Returns a dict:
-      {
-        "stdout":    str,
-        "stderr":    str,
-        "exit_code": int,
-        "timed_out": bool,
-      }
+    Execute `code` as a standalone Python script with the helper preamble
+    prepended. Returns a dict with stdout, stderr, exit_code, timed_out.
     """
-    # Inject DATA_DIR at the top of the script
-    preamble = f'DATA_DIR = {data_dir!r}\n\n'
-    full_code = preamble + code
+    full_code = PREAMBLE_TEMPLATE.format(data_dir=data_dir) + code
 
     with tempfile.NamedTemporaryFile(
         mode="w",
