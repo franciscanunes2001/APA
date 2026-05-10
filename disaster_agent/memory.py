@@ -17,6 +17,7 @@ Each entry:
 import json
 from pathlib import Path
 from datetime import datetime, timezone
+from typing import Optional
 
 
 def _load(log_path: Path) -> list[dict]:
@@ -41,7 +42,7 @@ def add_experiment(log_path: Path, entry: dict) -> None:
     _save(log_path, experiments)
 
 
-def get_best(experiments: list[dict]) -> tuple[float, dict | None]:
+def get_best(experiments: list[dict]) -> tuple[float, Optional[dict]]:
     """Returns (best_f1, best_experiment). best_f1=0.0 if no successes."""
     successful = [e for e in experiments if e.get("f1") is not None]
     if not successful:
