@@ -65,7 +65,7 @@ SCRIPT REQUIREMENTS:
        X_train_text = make_features(train)
        X_test_text  = make_features(test)
   3. 80/20 stratified split with random_state=42.
-  4. For Keras: max 5 epochs, EarlyStopping(patience=2), verbose=0,
+  4. For Keras: max 10 epochs, EarlyStopping(patience=2), verbose=0,
      class_weight={{0: 1.0, 1: 1.5}}.
   5. Total runtime under 3 minutes.
   6. Save submission BEFORE the RESULT line:
