@@ -12,6 +12,7 @@ phi4, etc.). Different models wrap code differently:
 """
 
 import re
+from typing import Optional
 
 
 # All accepted opening fences. Order matters: try language-tagged first,
@@ -108,7 +109,7 @@ def extract_architecture_name(response: str) -> str:
     return "unknown"
 
 
-def extract_f1(output: str) -> float | None:
+def extract_f1(output: str) -> Optional[float]:
     """
     Parse the mandatory output line:   RESULT: f1=0.7823
     Tolerant of whitespace and case.
