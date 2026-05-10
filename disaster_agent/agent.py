@@ -3,20 +3,9 @@ Autonomous Research Agent — main loop.
 
 Usage:
     python -m disaster_agent.agent [--max-iter N] [--target-f1 F]
-
-The loop:
-  1. If no experiments yet → run FIRST_EXPERIMENT_PROMPT (TF-IDF baseline)
-  2. Otherwise → call PROPOSE_PROMPT_TEMPLATE with history
-  3. Extract code from LLM response
-  4. Execute code; if it crashes → call FIX_PROMPT_TEMPLATE (up to 2 retries)
-  5. Parse F1 from stdout
-  6. Log result to experiments.json
-  7. Repeat until max_iter reached or F1 ≥ target_f1
-  8. Generate Kaggle submission from best experiment
 """
 
 import argparse
-import textwrap
 from pathlib import Path
 
 from .llm import call_llm
@@ -44,7 +33,7 @@ LOG_PATH     = PROJECT_ROOT / "experiments.json"
 # ── Defaults ──────────────────────────────────────────────────────────────────
 DEFAULT_MAX_ITER  = 7
 DEFAULT_TARGET_F1 = 0.82
-MAX_FIX_RETRIES   = 2
+MAX_FIX_RETRIES   = 3   # was 2 — bumped to give weaker models a third shot
 
 # ── Model Constants ───────────────────────────────────────────────────────────
 BATCH_SIZE = 32
@@ -68,10 +57,17 @@ def _run_with_fixes(
     data_dir: str,
 ) -> tuple[dict, str]:
     """
-    Execute code; if it fails, ask the LLM to fix it (up to MAX_FIX_RETRIES).
-    Returns (execution_result, final_code).
+    Execute code; if it fails, ask the LLM to fix it.
+
+    Strategy:
+      attempt 1: run the original code
+      attempt 2: send error + code, ask for fix
+      attempt 3: same as 2 but with stronger framing
+      final attempt (MAX_FIX_RETRIES): give up on the broken code entirely
+                                       and ask for a fresh rewrite from scratch
     """
     current_code = code
+
     for attempt in range(MAX_FIX_RETRIES + 1):
         result = run_code(current_code, data_dir)
 
@@ -84,28 +80,46 @@ def _run_with_fixes(
             print(f"  [executor] Still failing after {MAX_FIX_RETRIES} fix attempts.")
             return result, current_code
 
-        print(f"  [executor] Attempt {attempt + 1} failed. Asking LLM to fix...")
-        fix_prompt = FIX_PROMPT_TEMPLATE.format(
-            architecture=architecture,
-            error=error_msg,
-            code=current_code,
-        )
+        # On the LAST fix attempt, throw away the broken code and ask for
+        # a clean rewrite. Iterating on broken code tends to compound errors.
+        is_last_attempt = (attempt == MAX_FIX_RETRIES - 1)
+        if is_last_attempt:
+            print(f"  [executor] Attempt {attempt + 1} failed. "
+                  f"Asking LLM for a fresh rewrite (final attempt)...")
+            fix_prompt = (
+                f"You previously tried to write a '{architecture}' model and it failed.\n"
+                f"Last error was:\n```\n{error_msg[:500]}\n```\n\n"
+                f"Forget the previous attempt entirely. Write a NEW complete script "
+                f"for '{architecture}' from scratch. Use the pre-defined helpers "
+                f"(clean_text, make_features, DATA_DIR). Be conservative — use only "
+                f"sklearn defaults you are confident about. Return ONE ```python``` block."
+            )
+            # Re-prepend SYSTEM_PROMPT context manually
+            from .prompts import SYSTEM_PROMPT
+            fix_prompt = SYSTEM_PROMPT + "\n\n" + fix_prompt
+        else:
+            print(f"  [executor] Attempt {attempt + 1} failed. Asking LLM to fix...")
+            fix_prompt = FIX_PROMPT_TEMPLATE.format(
+                architecture=architecture,
+                error=error_msg,
+                code=current_code,
+            )
+
         fix_response = call_llm(fix_prompt)
         fixed_code = extract_code(fix_response)
         if fixed_code:
             current_code = fixed_code
         else:
-            print("  [llm] Could not extract fixed code.")
-            return result, current_code
+            print("  [llm] Could not extract fixed code from response.")
+            # Don't update current_code — try again with same code or bail next loop
+            if is_last_attempt:
+                return result, current_code
 
-    return result, current_code  # unreachable but satisfies linter
+    return result, current_code  # unreachable
 
 
 def _propose_experiment(experiments: list[dict]) -> tuple[str, str, str]:
-    """
-    Ask the LLM for the next experiment.
-    Returns (llm_response, architecture_name, code).
-    """
+    """Returns (llm_response, architecture_name, code)."""
     if not experiments:
         print("  [llm] Requesting first experiment (TF-IDF baseline)...")
         response = call_llm(FIRST_EXPERIMENT_PROMPT)
@@ -136,9 +150,9 @@ def run_agent(max_iter: int = DEFAULT_MAX_ITER, target_f1: float = DEFAULT_TARGE
     experiments = load_experiments(LOG_PATH)
     print(f"  Loaded {len(experiments)} previous experiments from {LOG_PATH.name}")
 
-    successful_iterations = 0  # only count experiments that ran (not parse failures)
+    successful_iterations = 0
 
-    for iteration in range(1, max_iter * 2):  # allow extra attempts for failed parses
+    for iteration in range(1, max_iter * 2):
         if successful_iterations >= max_iter:
             break
 
@@ -148,7 +162,7 @@ def run_agent(max_iter: int = DEFAULT_MAX_ITER, target_f1: float = DEFAULT_TARGE
         response, architecture, code = _propose_experiment(experiments)
         print(f"  Architecture: {architecture}")
 
-        # Extract optional rationale (second non-empty line before code block)
+        # Optional rationale
         rationale_lines = [
             l.strip() for l in response.splitlines()
             if l.strip() and not l.strip().startswith("#") and "```" not in l
@@ -167,11 +181,11 @@ def run_agent(max_iter: int = DEFAULT_MAX_ITER, target_f1: float = DEFAULT_TARGE
                 "stdout":        "",
             })
             experiments = load_experiments(LOG_PATH)
-            continue  # don't count against max_iter
+            continue
 
         successful_iterations += 1
 
-        # 2. Execute (with auto-fix retries)
+        # 2. Execute
         print("  [executor] Running...")
         result, final_code = _run_with_fixes(code, architecture, DATA_DIR)
 
@@ -209,15 +223,16 @@ def run_agent(max_iter: int = DEFAULT_MAX_ITER, target_f1: float = DEFAULT_TARGE
         })
         experiments = load_experiments(LOG_PATH)
 
-        # 5. Check stopping criterion
+        # 5. Stopping criterion
         best_f1, best_exp = get_best(experiments)
-        print(f"  [memory]   Best so far: F1={best_f1:.4f} ({best_exp['architecture'] if best_exp else 'none'})")
+        print(f"  [memory]   Best so far: F1={best_f1:.4f} "
+              f"({best_exp['architecture'] if best_exp else 'none'})")
 
         if best_f1 >= target_f1:
             _banner(f"Target F1 {target_f1} reached! Stopping early.")
             break
 
-    # ── End of loop: analysis + submission ───────────────────────────────────
+    # ── Wrap-up ───────────────────────────────────────────────────────────────
     _banner("Agent loop complete")
     experiments = load_experiments(LOG_PATH)
     best_f1, best_exp = get_best(experiments)
@@ -226,9 +241,9 @@ def run_agent(max_iter: int = DEFAULT_MAX_ITER, target_f1: float = DEFAULT_TARGE
         print("No successful experiments. Cannot generate submission.")
         return
 
-    print(f"Best experiment: #{best_exp['experiment_id']} — {best_exp['architecture']} — F1={best_f1:.4f}")
+    print(f"Best experiment: #{best_exp['experiment_id']} — "
+          f"{best_exp['architecture']} — F1={best_f1:.4f}")
 
-    # Optional LLM analysis
     history_str = format_history_for_prompt(experiments, n=len(experiments))
     analysis_prompt = ANALYZE_PROMPT_TEMPLATE.format(
         history=history_str,
@@ -238,10 +253,8 @@ def run_agent(max_iter: int = DEFAULT_MAX_ITER, target_f1: float = DEFAULT_TARGE
     analysis = call_llm(analysis_prompt)
     print(f"\n── LLM Analysis ──\n{analysis}\n")
 
-    # Save analysis to file
     (PROJECT_ROOT / "analysis.txt").write_text(analysis)
 
-    # Generate Kaggle submission
     _banner("Generating Kaggle submission")
     print("  Re-running best code to generate test predictions...")
 
@@ -259,16 +272,11 @@ def run_agent(max_iter: int = DEFAULT_MAX_ITER, target_f1: float = DEFAULT_TARGE
 
 def main():
     parser = argparse.ArgumentParser(description="Disaster Tweet autonomous agent")
-    parser.add_argument("--max-iter",  type=int,   default=DEFAULT_MAX_ITER,  help="Max iterations")
-    parser.add_argument("--target-f1", type=float, default=DEFAULT_TARGET_F1, help="Stop when F1 ≥ this")
+    parser.add_argument("--max-iter",  type=int,   default=DEFAULT_MAX_ITER)
+    parser.add_argument("--target-f1", type=float, default=DEFAULT_TARGET_F1)
     args = parser.parse_args()
     run_agent(max_iter=args.max_iter, target_f1=args.target_f1)
 
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
