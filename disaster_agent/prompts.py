@@ -10,11 +10,11 @@ SYSTEM_PROMPT = """You are an ML engineer building NLP models for binary text cl
 TASK: Classify tweets as disaster-related (target=1) or not (target=0).
 METRIC: F1 score (binary, positive class = 1).
 
-ALREADY DEFINED FOR YOU (do NOT redefine these — just use them):
+ALREADY DEFINED FOR YOU (do NOT redefine these - just use them):
   - DATA_DIR              : str path to the data directory
   - clean_text(text)      : returns a cleaned lowercase string
   - make_features(df)     : returns a Series of "keyword + text" cleaned strings
-  Tensorflow logging is already silenced.
+  TensorFlow logging is already silenced.
 
 DATASET:
   - train.csv: columns [id, keyword, location, text, target]  (~7600 rows)
@@ -28,18 +28,22 @@ AVAILABLE LIBRARIES (use ONLY these):
   - tensorflow / keras (for deep learning models)
   - numpy, pandas, re, string
 
-NOT AVAILABLE (do NOT import — your script will crash):
+NOT AVAILABLE (do NOT import - your script will crash):
   - torch, transformers, spacy, nltk, xgboost, lightgbm, catboost, gensim
 
-SKLEARN GOTCHAS (the agent has crashed on these before — pay attention):
+SKLEARN GOTCHAS (the agent has crashed on these before - pay attention):
   - LinearSVC, RidgeClassifier, SGDClassifier do NOT accept n_jobs.
   - GradientBoostingClassifier does NOT accept class_weight.
   - LinearSVC has no predict_proba; use decision_function for soft voting.
   - For ensembles, use sklearn.ensemble.VotingClassifier.
 
-EVALUATION — read this carefully:
+EVALUATION - read this carefully:
   - val_f1 = f1_score(y_val, y_pred_val)
   - NEVER pass y_train as the first argument. NEVER compare to y_train.
+  - Split BEFORE vectorizing/tokenizing/model fitting.
+  - Fit preprocessing ONLY on X_tr_text, never on the full train set.
+  - Fit the model ONLY on X_tr / y_tr, never on validation rows.
+  - If val_f1 is unusually high, re-check that validation data was not used in fitting.
 
 OUTPUT FORMAT (THIS IS THE MOST IMPORTANT RULE):
   Your response MUST be:
@@ -64,8 +68,15 @@ SCRIPT REQUIREMENTS:
   2. Build features WITH the pre-defined helper:
        X_train_text = make_features(train)
        X_test_text  = make_features(test)
-  3. 80/20 stratified split with random_state=42.
-  4. For Keras: max 5 epochs, EarlyStopping(patience=2), verbose=0,
+  3. 80/20 stratified split with random_state=42 BEFORE fitting any preprocessing:
+       X_tr_text, X_val_text, y_tr, y_val = train_test_split(
+           X_train_text, train['target'], test_size=0.2,
+           stratify=train['target'], random_state=42
+       )
+     Then fit vectorizers/tokenizers only on X_tr_text.
+     Then train models only on X_tr / y_tr.
+     Then calculate val_f1 only on X_val / y_val.
+  4. For Keras: max 10 epochs, EarlyStopping(patience=2), verbose=0,
      class_weight={{0: 1.0, 1: 1.5}}.
   5. Total runtime under 3 minutes.
   6. Save submission BEFORE the RESULT line:
@@ -106,17 +117,17 @@ Do NOT repeat any architecture from the tried list above.
 
 Pick the next UNTRIED option from this progression:
   1. TF-IDF + LogisticRegression              (class_weight='balanced', n_jobs=-1)
-  2. TF-IDF + SGDClassifier                   (loss='modified_huber', NO n_jobs)
-  3. TF-IDF + RidgeClassifier                 (alpha=1.0, class_weight='balanced', NO n_jobs)
-  4. TF-IDF + LinearSVC                       (C=0.5, class_weight='balanced', NO n_jobs)
-  5. TF-IDF + ComplementNB                    (alpha=0.5 — strong on imbalanced text)
-  6. TF-IDF + RandomForestClassifier          (n_estimators=200, class_weight='balanced', n_jobs=-1)
-  7. TF-IDF (char n-grams) + LogisticRegression  (analyzer='char_wb', ngram_range=(3,5))
-  8. Keras Embedding + 1D CNN                 (filters=128, kernel_size=3, GlobalMaxPool)
-  9. Keras Embedding + BiLSTM                 (units=64, recurrent_dropout=0.2)
- 10. Keras Embedding + CNN + BiGRU            (conv then recurrent)
+  2. TF-IDF + ComplementNB                    (alpha=0.5, strong on imbalanced text)
+  3. Keras Embedding + 1D CNN                 (filters=128, kernel_size=3, GlobalMaxPool)
+  4. Keras Embedding + BiLSTM                 (units=64, recurrent_dropout=0.2)
+  5. Keras Embedding + CNN + BiGRU            (conv then recurrent)
+  6. TF-IDF + SGDClassifier                   (loss='modified_huber', NO n_jobs)
+  7. TF-IDF + RidgeClassifier                 (alpha=1.0, class_weight='balanced', NO n_jobs)
+  8. TF-IDF + LinearSVC                       (C=0.5, class_weight='balanced', NO n_jobs)
+  9. TF-IDF (char n-grams) + LogisticRegression  (analyzer='char_wb', ngram_range=(3,5))
+ 10. TF-IDF + RandomForestClassifier          (n_estimators=200, class_weight='balanced', n_jobs=-1)
 
-DO NOT propose VotingClassifier or GradientBoostingClassifier — these have
+DO NOT propose VotingClassifier or GradientBoostingClassifier - these have
 sklearn-API incompatibilities that the agent has repeatedly failed to handle.
 
 REMINDER: import every sklearn class you use. Common imports needed:
@@ -129,13 +140,14 @@ REMINDER: import every sklearn class you use. Common imports needed:
   from sklearn.metrics import f1_score
 
 Keras-specific:
-  - Tokenizer fit on training texts only, transform train+val+test
+  - Tokenizer fit on X_tr_text only, transform X_tr_text + X_val_text + X_test_text
   - Pad sequences to maxlen=100, padding='post', truncating='post'
   - Embedding dim=64, trainable=True
   - Final layer: Dense(1, activation='sigmoid'), binary_crossentropy
+  - Use EarlyStopping(monitor='val_loss', patience=2, restore_best_weights=True)
   - class_weight={{0: 1.0, 1: 1.5}} in model.fit()
 
-OUTPUT FORMAT (follow EXACTLY — first three lines of your response):
+OUTPUT FORMAT (follow EXACTLY - first three lines of your response):
 Line 1: architecture name with no markdown, no quotes, no labels
 Line 2: one short sentence on why it should beat F1={best_f1:.4f}
 Line 3: blank
@@ -157,7 +169,7 @@ The following Python script for a "{architecture}" model crashed with this error
 
 ## YOUR TASK
 Return the COMPLETE corrected script inside a single ```python ... ``` block.
-Do not explain, do not add prose — just the fixed code in one fenced block.
+Do not explain, do not add prose - just the fixed code in one fenced block.
 Remember: clean_text, make_features, and DATA_DIR are already defined.
 """
 
