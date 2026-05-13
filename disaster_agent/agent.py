@@ -9,7 +9,12 @@ import argparse
 from pathlib import Path
 
 from .llm import call_llm
-from .parser import extract_code, extract_architecture_name, extract_f1
+from .parser import (
+    extract_code,
+    extract_architecture_name,
+    extract_f1,
+    extract_learning_curve,
+)
 from .executor import run_code, execution_succeeded
 from .memory import (
     load_experiments,
@@ -17,6 +22,8 @@ from .memory import (
     get_best,
     get_tried_architectures,
     format_history_for_prompt,
+    format_failed_for_prompt,
+    format_low_scoring_for_prompt,
 )
 from .prompts import (
     FIRST_EXPERIMENT_PROMPT,
@@ -33,6 +40,18 @@ LOG_PATH     = PROJECT_ROOT / "experiments.json"
 # ── Defaults ──────────────────────────────────────────────────────────────────
 DEFAULT_MAX_ITER  = 7
 DEFAULT_TARGET_F1 = 0.82
+CURRICULUM = [
+    "TF-IDF / bag-of-words strong linear baseline",
+    "TF-IDF / bag-of-words probabilistic baseline",
+    "TF-IDF / bag-of-words Dense MLP",
+    "Keras Embedding + 1D CNN",
+    "Keras Embedding + GRU or BiLSTM",
+    "Keras Embedding + CNN + GRU/BiGRU hybrid",
+    "Keras Embedding + small Transformer/self-attention block",
+    "Exploit best classical family so far",
+    "Exploit best deep-learning family so far",
+    "Final best-model refinement",
+]
 MAX_FIX_RETRIES   = 3   # was 2 — bumped to give weaker models a third shot
 
 # ── Model Constants ───────────────────────────────────────────────────────────
@@ -49,6 +68,24 @@ EPOCHS = 2
 def _banner(text: str) -> None:
     line = "─" * 60
     print(f"\n{line}\n  {text}\n{line}")
+
+
+def _curriculum_family(iteration_idx: int, max_iter: int) -> str:
+    """
+    Choose the architecture family assigned to this iteration.
+
+    Short runs walk the curriculum in order. Longer runs are spread across the
+    full curriculum so the agent explores first, then exploits/refines later.
+    """
+    if max_iter <= 1:
+        return CURRICULUM[0]
+    if max_iter <= len(CURRICULUM):
+        idx = min(iteration_idx, len(CURRICULUM) - 1)
+    else:
+        pos = iteration_idx * (len(CURRICULUM) - 1) / (max_iter - 1)
+        idx = int(round(pos))
+        idx = max(0, min(len(CURRICULUM) - 1, idx))
+    return CURRICULUM[idx]
 
 
 def _run_with_fixes(
@@ -118,28 +155,53 @@ def _run_with_fixes(
     return result, current_code  # unreachable
 
 
-def _propose_experiment(experiments: list[dict]) -> tuple[str, str, str]:
-    """Returns (llm_response, architecture_name, code)."""
+def _propose_experiment(
+    experiments: list[dict],
+    iteration_idx: int,
+    max_iter: int,
+) -> tuple[str, str, str, str, str]:
+    """Returns (llm_response, prompt_used, assigned_family, architecture_name, code)."""
+    assigned_family = _curriculum_family(iteration_idx, max_iter)
     if not experiments:
+        assigned_family = CURRICULUM[0]
         print("  [llm] Requesting first experiment (TF-IDF baseline)...")
-        response = call_llm(FIRST_EXPERIMENT_PROMPT)
+        prompt_used = FIRST_EXPERIMENT_PROMPT
+        response = call_llm(prompt_used)
     else:
         best_f1, _ = get_best(experiments)
         history_str = format_history_for_prompt(experiments)
         tried_list  = ", ".join(get_tried_architectures(experiments))
+        failed_list = format_failed_for_prompt(experiments)
+        low_scoring_list = format_low_scoring_for_prompt(experiments)
 
-        prompt = PROPOSE_PROMPT_TEMPLATE.format(
+        prompt_used = PROPOSE_PROMPT_TEMPLATE.format(
             n=min(len(experiments), 5),
             history=history_str,
             best_f1=best_f1,
             tried_list=tried_list,
+            failed_list=failed_list,
+            low_scoring_list=low_scoring_list,
         )
-        print("  [llm] Requesting next experiment proposal...")
-        response = call_llm(prompt)
+        prompt_used += f"""
+
+IMPORTANT - CONTROLLER ASSIGNED FAMILY:
+For this experiment, you MUST implement exactly this architecture family:
+
+{assigned_family}
+
+Do NOT choose another family.
+Do NOT write the family name as the architecture name. Line 1 must be the
+actual concrete architecture implemented, for example "TF-IDF + ComplementNB"
+or "Keras Embedding + CNN + GRU".
+During exploration, prioritize diversity of architecture families.
+During exploitation/refinement, change only ONE meaningful design choice at a time.
+"""
+        print(f"  [llm] Requesting experiment: {assigned_family}")
+        response = call_llm(prompt_used)
 
     architecture = extract_architecture_name(response)
     code = extract_code(response)
-    return response, architecture, code
+    return response, prompt_used, assigned_family, architecture, code
 
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
@@ -159,7 +221,12 @@ def run_agent(max_iter: int = DEFAULT_MAX_ITER, target_f1: float = DEFAULT_TARGE
         _banner(f"Iteration {successful_iterations + 1}/{max_iter}")
 
         # 1. Propose
-        response, architecture, code = _propose_experiment(experiments)
+        response, prompt_used, assigned_family, architecture, code = _propose_experiment(
+            experiments,
+            successful_iterations,
+            max_iter,
+        )
+        print(f"  Family:       {assigned_family}")
         print(f"  Architecture: {architecture}")
 
         # Optional rationale
@@ -176,9 +243,12 @@ def run_agent(max_iter: int = DEFAULT_MAX_ITER, target_f1: float = DEFAULT_TARGE
                 "f1":            None,
                 "status":        "failed",
                 "error":         "No code block in LLM response",
+                "assigned_family": assigned_family,
                 "code":          "",
                 "llm_rationale": llm_rationale,
                 "stdout":        "",
+                "prompt":        prompt_used,
+                "learning_curve": [],
             })
             experiments = load_experiments(LOG_PATH)
             continue
@@ -193,6 +263,7 @@ def run_agent(max_iter: int = DEFAULT_MAX_ITER, target_f1: float = DEFAULT_TARGE
         f1 = None
         status = "failed"
         error_msg = None
+        learning_curve = extract_learning_curve(result["stdout"])
 
         if result["timed_out"]:
             status = "timeout"
@@ -203,6 +274,8 @@ def run_agent(max_iter: int = DEFAULT_MAX_ITER, target_f1: float = DEFAULT_TARGE
             if f1 is not None:
                 status = "success"
                 print(f"  [result]   F1 = {f1:.4f}")
+                if learning_curve:
+                    print(f"  [result]   Captured {len(learning_curve)} Keras epoch(s)")
             else:
                 status = "failed"
                 error_msg = "Script ran but RESULT line not found in stdout"
@@ -217,9 +290,12 @@ def run_agent(max_iter: int = DEFAULT_MAX_ITER, target_f1: float = DEFAULT_TARGE
             "f1":            f1,
             "status":        status,
             "error":         error_msg,
+            "assigned_family": assigned_family,
             "code":          final_code,
             "llm_rationale": llm_rationale,
             "stdout":        result["stdout"][:2000],
+            "prompt":        prompt_used,
+            "learning_curve": learning_curve,
         })
         experiments = load_experiments(LOG_PATH)
 
