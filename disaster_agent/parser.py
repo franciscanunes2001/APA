@@ -125,3 +125,31 @@ def extract_f1(output: str) -> Optional[float]:
         except ValueError:
             return None
     return None
+
+
+_EPOCH_LINE_RE = re.compile(
+    r"EPOCH_METRIC\s+epoch=(\d+)\s+loss=([0-9.eE+-]+)\s+val_loss=([0-9.eE+-]+)"
+)
+
+
+def extract_learning_curve(output: str) -> list[dict]:
+    """
+    Parse Keras epoch metrics emitted by the executor preamble.
+
+    Returns a list like:
+      [{"epoch": 1, "loss": 0.52, "val_loss": 0.43}, ...]
+    Empty for sklearn-only experiments.
+    """
+    if not output:
+        return []
+    curve = []
+    for match in _EPOCH_LINE_RE.finditer(output):
+        try:
+            curve.append({
+                "epoch": int(match.group(1)),
+                "loss": float(match.group(2)),
+                "val_loss": float(match.group(3)),
+            })
+        except ValueError:
+            continue
+    return curve

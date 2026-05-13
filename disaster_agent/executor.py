@@ -59,6 +59,37 @@ def make_features(df):
     kw  = df['keyword'].fillna('').apply(clean_text)
     txt = df['text'].fillna('').apply(clean_text)
     return (kw + ' ' + txt).str.strip()
+
+# Keras epoch logger. If TensorFlow/Keras is available, patch Model.fit so
+# every Keras run emits compact parseable epoch metrics while still allowing
+# generated code to use verbose=0.
+try:
+    from tensorflow.keras.callbacks import Callback as _KCallback
+    from tensorflow.keras.models import Model as _KModel
+
+    class _EpochPrinter(_KCallback):
+        def on_epoch_end(self, epoch, logs=None):
+            logs = logs or {{}}
+            loss = logs.get('loss', float('nan'))
+            val_loss = logs.get('val_loss', float('nan'))
+            print(
+                f"EPOCH_METRIC epoch={{epoch + 1}} "
+                f"loss={{loss:.6f}} val_loss={{val_loss:.6f}}",
+                flush=True,
+            )
+
+    _orig_fit = _KModel.fit
+
+    def _patched_fit(self, *args, **kwargs):
+        callbacks = list(kwargs.get('callbacks') or [])
+        if not any(isinstance(callback, _EpochPrinter) for callback in callbacks):
+            callbacks.append(_EpochPrinter())
+        kwargs['callbacks'] = callbacks
+        return _orig_fit(self, *args, **kwargs)
+
+    _KModel.fit = _patched_fit
+except Exception:
+    pass
 # ── End preamble ────────────────────────────────────────────────────────────
 
 '''
@@ -76,6 +107,7 @@ def run_code(code: str, data_dir: str) -> dict:
         suffix=".py",
         delete=False,
         prefix="agent_exp_",
+        encoding="utf-8",
     ) as f:
         f.write(full_code)
         tmp_path = f.name
