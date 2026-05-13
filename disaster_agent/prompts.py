@@ -15,6 +15,8 @@ ALREADY DEFINED FOR YOU (do NOT redefine these - just use them):
   - clean_text(text)      : returns a cleaned lowercase string
   - make_features(df)     : returns a Series of "keyword + text" cleaned strings
   TensorFlow logging is already silenced.
+  For Keras runs, the executor auto-attaches a callback that prints compact
+  EPOCH_METRIC lines. Use verbose=0; do not print epoch logs manually.
 
 DATASET:
   - train.csv: columns [id, keyword, location, text, target]  (~7600 rows)
@@ -36,6 +38,12 @@ SKLEARN GOTCHAS (the agent has crashed on these before - pay attention):
   - GradientBoostingClassifier does NOT accept class_weight.
   - LinearSVC has no predict_proba; use decision_function for soft voting.
   - For ensembles, use sklearn.ensemble.VotingClassifier.
+
+KERAS GOTCHAS (the agent has crashed on these before - pay attention):
+  - Do NOT pass input_length to Embedding; Keras 3 treats it as deprecated.
+  - MultiHeadAttention should use the Functional API, not Sequential.
+  - Tokenizer must be fit only on X_tr_text.
+  - Keep Keras fit(..., verbose=0) so logs remain readable.
 
 EVALUATION - read this carefully:
   - val_f1 = f1_score(y_val, y_pred_val)
@@ -111,21 +119,43 @@ PROPOSE_PROMPT_TEMPLATE = SYSTEM_PROMPT + """
 ## CURRENT BEST F1: {best_f1:.4f}
 ## ALL ARCHITECTURES TRIED: {tried_list}
 
+## ARCHITECTURES THAT FAILED OR TIMED OUT (do not retry exactly):
+{failed_list}
+
+## ARCHITECTURES THAT RAN BUT SCORED LOW (avoid tiny tweaks):
+{low_scoring_list}
+
 ## YOUR TASK
 Propose a NEW experiment that improves on the current best F1.
 Do NOT repeat any architecture from the tried list above.
+Avoid repeating failed architectures exactly. If you revisit a weak family,
+change one meaningful design choice instead of only random_state/max_iter.
 
-Pick the next UNTRIED option from this progression:
-  1. TF-IDF + LogisticRegression              (class_weight='balanced', n_jobs=-1)
-  2. TF-IDF + ComplementNB                    (alpha=0.5, strong on imbalanced text)
-  3. Keras Embedding + 1D CNN                 (filters=128, kernel_size=3, GlobalMaxPool)
-  4. Keras Embedding + BiLSTM                 (units=64, recurrent_dropout=0.2)
-  5. Keras Embedding + CNN + BiGRU            (conv then recurrent)
-  6. TF-IDF + SGDClassifier                   (loss='modified_huber', NO n_jobs)
-  7. TF-IDF + RidgeClassifier                 (alpha=1.0, class_weight='balanced', NO n_jobs)
-  8. TF-IDF + LinearSVC                       (C=0.5, class_weight='balanced', NO n_jobs)
-  9. TF-IDF (char n-grams) + LogisticRegression  (analyzer='char_wb', ngram_range=(3,5))
- 10. TF-IDF + RandomForestClassifier          (n_estimators=200, class_weight='balanced', n_jobs=-1)
+The controller assigns one architecture family per experiment from this
+curriculum:
+  1. TF-IDF / bag-of-words strong linear baseline
+  2. TF-IDF / bag-of-words probabilistic baseline
+  3. TF-IDF / bag-of-words Dense MLP
+  4. Keras Embedding + 1D CNN
+  5. Keras Embedding + GRU or BiLSTM
+  6. Keras Embedding + CNN + GRU/BiGRU hybrid
+  7. Keras Embedding + small Transformer/self-attention block
+  8. Exploit best classical family so far
+  9. Exploit best deep-learning family so far
+ 10. Final best-model refinement
+
+You MUST follow the specific assigned family appended after this prompt.
+Line 1 must name the actual concrete architecture implemented, not the
+curriculum family name.
+
+Examples of concrete choices inside those families:
+  - strong linear baseline: TF-IDF + LogisticRegression, TF-IDF + LinearSVC
+  - probabilistic baseline: TF-IDF + ComplementNB
+  - Dense MLP: TF-IDF features + sklearn MLPClassifier or a small Keras Dense MLP
+  - Keras CNN: Tokenizer/TextVectorization + Embedding + Conv1D + pooling
+  - Keras recurrent: Embedding + GRU, BiGRU, LSTM, or BiLSTM
+  - hybrid: Embedding + Conv1D followed by GRU/BiGRU
+  - self-attention: small Keras MultiHeadAttention block, kept under 3 minutes
 
 DO NOT propose VotingClassifier or GradientBoostingClassifier - these have
 sklearn-API incompatibilities that the agent has repeatedly failed to handle.
