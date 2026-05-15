@@ -32,6 +32,31 @@ DATA_DIR = {data_dir!r}
 
 import re as _re
 
+# ── Standard library ─────────────────────────────────────────────────────────
+import os, sys, re, string, json, math, time, warnings
+warnings.filterwarnings('ignore')
+ 
+# ── Scientific stack ─────────────────────────────────────────────────────────
+import numpy as np
+import pandas as pd
+ 
+# ── Sklearn: data prep ───────────────────────────────────────────────────────
+from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
+from sklearn.preprocessing import LabelEncoder, StandardScaler, MinMaxScaler
+from sklearn.pipeline import Pipeline
+from sklearn.metrics import f1_score, accuracy_score, classification_report
+ 
+# ── Sklearn: feature extraction ──────────────────────────────────────────────
+from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer, HashingVectorizer
+ 
+# ── Sklearn: classifiers ─────────────────────────────────────────────────────
+from sklearn.linear_model import LogisticRegression, SGDClassifier, RidgeClassifier
+from sklearn.svm import LinearSVC, SVC
+from sklearn.naive_bayes import MultinomialNB, ComplementNB, BernoulliNB
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
+from sklearn.neural_network import MLPClassifier
+from sklearn.calibration import CalibratedClassifierCV
+
 _CONTRACTIONS = {{
     "don't":"do not","doesn't":"does not","didn't":"did not","won't":"will not",
     "can't":"cannot","couldn't":"could not","isn't":"is not","aren't":"are not",
