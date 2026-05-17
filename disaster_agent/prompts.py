@@ -84,7 +84,7 @@ SCRIPT REQUIREMENTS:
      Then fit vectorizers/tokenizers only on X_tr_text.
      Then train models only on X_tr / y_tr.
      Then calculate val_f1 only on X_val / y_val.
-  4. For Keras: max 10 epochs, EarlyStopping(patience=2), verbose=0,
+  4. For Keras: max 10 epochs, EarlyStopping with restore_best_weights=True, verbose=0,
      class_weight={{0: 1.0, 1: 1.5}}.
   5. Total runtime under 3 minutes.
   6. Save submission BEFORE the RESULT line:
@@ -175,16 +175,22 @@ REMINDER: import every sklearn class you use. Common imports needed:
 Keras-specific:
   - Tokenizer fit on X_tr_text only, transform X_tr_text + X_val_text + X_test_text
   - Pad sequences to maxlen=40, padding='post', truncating='post'
-  - Embedding dim=64, trainable=True
-  - Add Dropout(0.3) after recurrent/conv layers to prevent overfitting
+  - Embedding dim: choose between 64, 128, or 256 — do NOT always use 64
+  - Always use trainable=True for the Embedding layer
+  - Dropout rate: choose between 0.2, 0.3, or 0.5 — do NOT always use 0.3
+  - Add Dropout after recurrent/conv layers to prevent overfitting
   - Final layer: Dense(1, activation='sigmoid'), binary_crossentropy
-  - Use EarlyStopping(monitor='val_loss', patience=2, restore_best_weights=True)
+  - Use EarlyStopping(monitor='val_loss', restore_best_weights=True)
+  - EarlyStopping patience: choose between 2, 3, or 4 — do NOT always use 2
   - class_weight={{0: 1.0, 1: 1.5}} in model.fit()
+  - batch_size: choose between 32, 64, 128, or 256 — do NOT always use 32
 
 TF-IDF-specific:
   - max_features MUST be between 20000-50000. Do NOT use max_features below 10000.
   - ngram_range MUST be (1,2) or (1,3). Never omit this parameter.
   - Always use sublinear_tf=True
+  - LogisticRegression C: choose between 0.1, 0.5, 1.0, 5.0, 10.0
+  - class_weight: try 'balanced' or {{0: 1.0, 1: 1.5}} or {{0: 1.0, 1: 2.0}}
 
 OUTPUT FORMAT (follow EXACTLY - first three lines of your response):
 Line 1: architecture name with no markdown, no quotes, no labels

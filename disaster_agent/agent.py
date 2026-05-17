@@ -207,6 +207,8 @@ actual concrete architecture implemented, for example "TF-IDF + ComplementNB"
 or "Keras Embedding + CNN + GRU".
 During exploration, prioritize diversity of architecture families.
 During exploitation/refinement, change only ONE meaningful design choice at a time.
+EXPLOITATION WARNING: do NOT add extra Dense layers — this causes overfitting on 
+small datasets. Instead tune: batch_size, dropout rate, embedding dim, or patience.
 """
         print(f"  [llm] Requesting experiment: {assigned_family}")
         response = call_llm(prompt_used)
