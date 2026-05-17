@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 
-LOW_SCORE_THRESHOLD = 0.70
+LOW_SCORE_THRESHOLD = 0.76
 
 
 def _load(log_path: Path) -> list[dict]:

@@ -168,7 +168,7 @@ def _propose_experiment(
         prompt_used = FIRST_EXPERIMENT_PROMPT
         response = call_llm(prompt_used)
     else:
-        best_f1, _ = get_best(experiments)
+        best_f1, best_exp = get_best(experiments)
         history_str = format_history_for_prompt(experiments)
         tried_list  = ", ".join(get_tried_architectures(experiments))
         failed_list = format_failed_for_prompt(experiments)
@@ -188,6 +188,18 @@ IMPORTANT - CONTROLLER ASSIGNED FAMILY:
 For this experiment, you MUST implement exactly this architecture family:
 
 {assigned_family}
+
+The current best model overall is: {best_exp['architecture'] if best_exp else 'none yet'} with F1={best_f1:.4f}
+
+For "Exploit best classical family": ignore the overall best if it uses Keras Embedding.
+Base your implementation on the best TF-IDF based model found so far.
+
+For "Exploit best deep-learning family": ignore the overall best if it uses TF-IDF.
+Base your implementation on the best Keras Embedding model found so far.
+BEST KERAS EMBEDDING MODEL SO FAR: look in the experiment history above and find
+the highest F1 among models using Keras Embedding layers — use THAT as your base.
+
+Do NOT switch to a different architecture family than assigned.
 
 Do NOT choose another family.
 Do NOT write the family name as the architecture name. Line 1 must be the
