@@ -76,12 +76,12 @@ def clean_text(text):
     text = _re.sub(r'[^\\x00-\\x7F]+', '', text)
     for k, v in _CONTRACTIONS.items():
         text = text.replace(k, v)
-    text = _re.sub(r'[^a-z\\s]', ' ', text)
+    text = _re.sub(r'[^a-z\\s#@]', ' ', text)  # keeps # and @
     text = _re.sub(r'\\s+', ' ', text).strip()
     return text
 
 def make_features(df):
-    kw  = df['keyword'].fillna('').apply(clean_text)
+    kw  = df['keyword'].fillna('').str.replace('%20', ' ', regex=False).apply(clean_text)
     txt = df['text'].fillna('').apply(clean_text)
     return (kw + ' ' + txt).str.strip()
 
