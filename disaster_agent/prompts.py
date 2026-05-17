@@ -100,8 +100,8 @@ FIRST_EXPERIMENT_PROMPT = SYSTEM_PROMPT + """
 This is experiment #1. Build a TF-IDF + Logistic Regression baseline.
 
   - Use the pre-defined make_features (do NOT redefine it)
-  - TF-IDF: max_features=10000, ngram_range=(1,2), sublinear_tf=True
-  - LogisticRegression: C=1.0, max_iter=1000, class_weight='balanced', solver='saga', n_jobs=-1
+  - TF-IDF: choose max_features between 10000-50000, ngram_range=(1,2) or (1,3), sublinear_tf=True
+  - LogisticRegression: tune C (try 0.5, 1.0, 5.0), class_weight='balanced', solver='saga', n_jobs=-1
   - Evaluate F1 on the validation set
   - Save submission.csv
   - Print the RESULT line LAST
@@ -130,6 +130,9 @@ Propose a NEW experiment that improves on the current best F1.
 Do NOT repeat any architecture from the tried list above.
 Avoid repeating failed architectures exactly. If you revisit a weak family,
 change one meaningful design choice instead of only random_state/max_iter.
+IMPORTANT: Do NOT copy parameters from previous experiments.
+Change at least ONE meaningful hyperparameter compared to any previous
+experiment in the same family.
 
 The controller assigns one architecture family per experiment from this
 curriculum:
@@ -140,9 +143,9 @@ curriculum:
   5. Keras Embedding + GRU or BiLSTM
   6. Keras Embedding + CNN + GRU/BiGRU hybrid
   7. Keras Embedding + small Transformer/self-attention block
-  8. Exploit best classical family so far
-  9. Exploit best deep-learning family so far
- 10. Final best-model refinement
+  8. Exploit best classical family so far (TF-IDF based models only: LogisticRegression, LinearSVC, ComplementNB, Dense MLP with TF-IDF features — NO Keras Embedding)
+  9. Exploit best deep-learning family so far (Keras Embedding models ONLY: CNN, BiLSTM, GRU, Transformer — must use Keras Embedding layer, NOT TF-IDF)
+ 10. Final best-model refinement (best overall model regardless of family)
 
 You MUST follow the specific assigned family appended after this prompt.
 Line 1 must name the actual concrete architecture implemented, not the
@@ -171,11 +174,17 @@ REMINDER: import every sklearn class you use. Common imports needed:
 
 Keras-specific:
   - Tokenizer fit on X_tr_text only, transform X_tr_text + X_val_text + X_test_text
-  - Pad sequences to maxlen=100, padding='post', truncating='post'
+  - Pad sequences to maxlen=40, padding='post', truncating='post'
   - Embedding dim=64, trainable=True
+  - Add Dropout(0.3) after recurrent/conv layers to prevent overfitting
   - Final layer: Dense(1, activation='sigmoid'), binary_crossentropy
   - Use EarlyStopping(monitor='val_loss', patience=2, restore_best_weights=True)
   - class_weight={{0: 1.0, 1: 1.5}} in model.fit()
+
+TF-IDF-specific:
+  - max_features MUST be between 20000-50000. Do NOT use max_features below 10000.
+  - ngram_range MUST be (1,2) or (1,3). Never omit this parameter.
+  - Always use sublinear_tf=True
 
 OUTPUT FORMAT (follow EXACTLY - first three lines of your response):
 Line 1: architecture name with no markdown, no quotes, no labels
