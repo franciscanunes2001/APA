@@ -131,8 +131,9 @@ Do NOT repeat any architecture from the tried list above.
 Avoid repeating failed architectures exactly. If you revisit a weak family,
 change one meaningful design choice instead of only random_state/max_iter.
 IMPORTANT: Do NOT copy parameters from previous experiments.
-Change at least ONE meaningful hyperparameter compared to any previous
-experiment in the same family.
+Change at least ONE but no more than TWO hyperparameters compared to any 
+previous experiment in the same family. Do not change everything at once —
+systematic one-at-a-time changes make results interpretable.
 
 The controller assigns one architecture family per experiment from this
 curriculum:
