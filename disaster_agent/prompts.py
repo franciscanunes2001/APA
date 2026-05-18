@@ -176,15 +176,15 @@ REMINDER: import every sklearn class you use. Common imports needed:
 Keras-specific:
   - Tokenizer fit on X_tr_text only, transform X_tr_text + X_val_text + X_test_text
   - Pad sequences to maxlen=40, padding='post', truncating='post'
-  - Embedding dim: choose between 64, 128, or 256 — do NOT always use 64
+  - Embedding dim: choose between 64 or 128 — do NOT always use 64
   - Always use trainable=True for the Embedding layer
   - Dropout rate: choose between 0.2, 0.3, or 0.5 — do NOT always use 0.3
   - Add Dropout after recurrent/conv layers to prevent overfitting
   - Final layer: Dense(1, activation='sigmoid'), binary_crossentropy
   - Use EarlyStopping(monitor='val_loss', restore_best_weights=True)
-  - EarlyStopping patience: choose between 2, 3, or 4 — do NOT always use 2
+  - EarlyStopping patience: choose between 3 or 4
   - class_weight={{0: 1.0, 1: 1.5}} in model.fit()
-  - batch_size: choose between 32, 64, 128, or 256 — do NOT always use 32
+  - batch_size: choose between 64, 128, or 256 — do NOT always use 32
 
 TF-IDF-specific:
   - max_features MUST be between 20000-50000. Do NOT use max_features below 10000.

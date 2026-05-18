@@ -39,7 +39,7 @@ def _strip_think_blocks(text: str) -> str:
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL | re.IGNORECASE)
 
 
-def extract_code(response: str) -> str | None:
+def extract_code(response: str) -> Optional[str]:
     """
     Pull the first Python code block out of an LLM response.
     Returns the code string, or None if no block found.
@@ -79,7 +79,7 @@ def extract_f1(output: str) -> Optional[float]:
     return None
 
 
-def extract_architecture_name(code: str | None) -> str:
+def extract_architecture_name(code: Optional[str]) -> str:
     """
     Ask the LLM to summarise the architecture name from the code itself.
 

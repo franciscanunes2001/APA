@@ -9,6 +9,7 @@ Set AGENT_MODEL env var to switch models without touching code:
 import os
 import sys
 import time
+from typing import Optional
 
 from openai import OpenAI, APIConnectionError, APIError
 
@@ -36,7 +37,7 @@ def _unescape_template_braces(s: str) -> str:
     return s.replace("{{", "{").replace("}}", "}")
 
 
-def _chat_once(prompt: str, system: str | None) -> str:
+def _chat_once(prompt: str, system: Optional[str]) -> str:
     client = get_client()
     prompt = _unescape_template_braces(prompt)
     if system:
@@ -57,13 +58,13 @@ def _chat_once(prompt: str, system: str | None) -> str:
     return content or ""
 
 
-def call_llm(prompt: str, system: str | None = None) -> str:
+def call_llm(prompt: str, system: Optional[str] = None) -> str:
     """
     Send a prompt and return the raw text response.
     Retries on transient connection / 5xx errors so a flaky local Ollama
     instance doesn't kill the whole agent run.
     """
-    last_err: Exception | None = None
+    last_err: Optional[Exception] = None
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             return _chat_once(prompt, system)
