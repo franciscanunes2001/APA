@@ -38,7 +38,7 @@ DATA_DIR     = str(PROJECT_ROOT)
 LOG_PATH     = PROJECT_ROOT / "experiments.json"
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
-DEFAULT_MAX_ITER  = 7
+DEFAULT_MAX_ITER  = 10
 DEFAULT_TARGET_F1 = 0.82
 CURRICULUM = [
     "TF-IDF / bag-of-words strong linear baseline",
