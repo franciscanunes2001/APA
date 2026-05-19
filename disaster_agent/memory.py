@@ -83,23 +83,40 @@ def get_failed_architectures(experiments: list[dict]) -> list[str]:
 def get_low_scoring_architectures(
     experiments: list[dict],
     threshold: float = LOW_SCORE_THRESHOLD,
-) -> list[tuple[str, float]]:
+) -> list[tuple[str, float, str]]:
     """
     Architectures that ran but whose best observed F1 is below threshold.
+    Returns (architecture_name, best_f1, assigned_family) so callers can
+    filter by family.
     """
-    best_per_arch: dict[str, float] = {}
+    best_per_arch: dict[str, tuple[float, str]] = {}
     for e in experiments:
         f1 = e.get("f1")
         if f1 is None:
             continue
         name = e.get("architecture", "unknown")
-        if f1 > best_per_arch.get(name, -1.0):
-            best_per_arch[name] = f1
-    return [(name, f1) for name, f1 in best_per_arch.items() if f1 < threshold]
+        family = e.get("assigned_family", "")
+        if f1 > best_per_arch.get(name, (-1.0, ""))[0]:
+            best_per_arch[name] = (f1, family)
+    return [
+        (name, f1, family) for name, (f1, family) in best_per_arch.items()
+        if f1 < threshold
+    ]
+
+
+_ANALYSIS_PREVIEW_CHARS = 280  # per-experiment cap to keep the history compact
 
 
 def format_history_for_prompt(experiments: list[dict], n: int = 5) -> str:
-    """Format the last n experiments as a compact summary for the LLM."""
+    """
+    Format the last n experiments as a compact summary for the LLM.
+
+    Each experiment contributes its arch + F1 + family + one-line LLM
+    rationale, followed by a truncated dump of the per-iteration
+    `iteration_analysis` from that run. Feeding the prior analysis back
+    here is what makes "iterate based on what it learned" actually mean
+    something — without it the analysis is generated and never read.
+    """
     recent = experiments[-n:]
     lines = []
     for e in recent:
@@ -107,10 +124,18 @@ def format_history_for_prompt(experiments: list[dict], n: int = 5) -> str:
         rationale = e.get("llm_rationale", "")
         family = e.get("assigned_family", "")
         family_part = f" | family={family}" if family else ""
-        lines.append(
+        header = (
             f"  Exp #{e['experiment_id']}: {e['architecture']} -> F1={f1_str}{family_part}"
             + (f"  [{rationale}]" if rationale else "")
         )
+        lines.append(header)
+
+        analysis = (e.get("iteration_analysis") or "").strip()
+        if analysis:
+            if len(analysis) > _ANALYSIS_PREVIEW_CHARS:
+                analysis = analysis[:_ANALYSIS_PREVIEW_CHARS].rstrip() + "…"
+            # Indent so it's visually attached to its experiment line.
+            lines.append(f"      analysis: {analysis}")
     return "\n".join(lines) if lines else "  (none yet)"
 
 
@@ -124,8 +149,17 @@ def format_failed_for_prompt(experiments: list[dict]) -> str:
 def format_low_scoring_for_prompt(
     experiments: list[dict],
     threshold: float = LOW_SCORE_THRESHOLD,
+    exclude_family: str = "",
 ) -> str:
+    """
+    Format low-scoring architectures, skipping any whose assigned_family
+    matches `exclude_family`. The exclusion stops the controller from
+    telling the LLM both "MUST implement family X" and "avoid tiny tweaks
+    on past attempts in family X" in the same prompt.
+    """
     low = get_low_scoring_architectures(experiments, threshold)
+    if exclude_family:
+        low = [(n, f, fam) for n, f, fam in low if fam != exclude_family]
     if not low:
         return "  (none)"
-    return "\n".join(f"  - {name} (best F1={f1:.4f})" for name, f1 in low)
+    return "\n".join(f"  - {name} (best F1={f1:.4f})" for name, f1, _ in low)
