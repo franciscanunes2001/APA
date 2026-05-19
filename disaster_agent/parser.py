@@ -113,15 +113,34 @@ def extract_f1(output: str) -> Optional[float]:
     """
     Parse the mandatory output line:   RESULT: f1=0.7823
     Tolerant of whitespace and case.
-    Returns the float value, or None if not found.
+
+    Fallback: if the LLM ignored the strict format and printed something
+    like "Validation F1 Score: 0.7823" or "val_f1 = 0.78", accept that too.
+    The strict RESULT line still takes precedence when present.
+
+    Returns the float value, or None if no recognisable F1 line is found.
     """
     if not output:
         return None
-    match = re.search(r"RESULT\s*:\s*f1\s*=\s*([0-9]*\.?[0-9]+)",
-                      output, re.IGNORECASE)
-    if match:
+
+    primary = re.search(r"RESULT\s*:\s*f1\s*=\s*([0-9]*\.?[0-9]+)",
+                        output, re.IGNORECASE)
+    if primary:
         try:
-            return float(match.group(1))
+            return float(primary.group(1))
+        except ValueError:
+            return None
+
+    # Fallback patterns — common LLM-spelling variants of the F1 line.
+    # Anchored so we don't snag arbitrary "0.7" floats in the stdout.
+    fallback = re.search(
+        r"(?:validation\s+f1\s+score|val[_ ]?f1|f1\s+score)"
+        r"\s*[:=]\s*([0-9]*\.?[0-9]+)",
+        output, re.IGNORECASE,
+    )
+    if fallback:
+        try:
+            return float(fallback.group(1))
         except ValueError:
             return None
     return None

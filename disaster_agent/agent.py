@@ -30,6 +30,8 @@ from .prompts import (
     PROPOSE_PROMPT_TEMPLATE,
     FIX_PROMPT_TEMPLATE,
     ANALYZE_PROMPT_TEMPLATE,
+    ITERATION_ANALYSIS_EXPLORATION_TEMPLATE,
+    ITERATION_ANALYSIS_EXPLOITATION_TEMPLATE,
 )
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
@@ -53,14 +55,6 @@ CURRICULUM = [
     "Final best-model refinement",
 ]
 MAX_FIX_RETRIES   = 3   # was 2 — bumped to give weaker models a third shot
-
-# ── Model Constants ───────────────────────────────────────────────────────────
-BATCH_SIZE = 32
-NUM_TRAINING_EXAMPLES = 7600  # Approximate from dataset (~7600 rows)
-TRAIN_SPLIT = 0.8
-VAL_SPLIT = 0.2
-STEPS_PER_EPOCH = int(NUM_TRAINING_EXAMPLES * TRAIN_SPLIT) // BATCH_SIZE
-EPOCHS = 2
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -169,13 +163,18 @@ def _propose_experiment(
         response = call_llm(prompt_used)
     else:
         best_f1, best_exp = get_best(experiments)
-        history_str = format_history_for_prompt(experiments)
+        history_str = format_history_for_prompt(experiments, n=len(experiments))
         tried_list  = ", ".join(get_tried_architectures(experiments))
         failed_list = format_failed_for_prompt(experiments)
-        low_scoring_list = format_low_scoring_for_prompt(experiments)
+        # Exclude the currently-assigned family from the "avoid tiny tweaks"
+        # warning — otherwise the LLM gets contradictory orders ("MUST
+        # implement family X" + "avoid tiny tweaks on past attempts in X").
+        low_scoring_list = format_low_scoring_for_prompt(
+            experiments, exclude_family=assigned_family,
+        )
 
         prompt_used = PROPOSE_PROMPT_TEMPLATE.format(
-            n=min(len(experiments), 5),
+            n=len(experiments),
             history=history_str,
             best_f1=best_f1,
             tried_list=tried_list,
@@ -298,7 +297,34 @@ def run_agent(max_iter: int = DEFAULT_MAX_ITER, target_f1: float = DEFAULT_TARGE
             error_msg = (result["stderr"] or "")[:1000]
             print(f"  [executor] FAILED:\n{error_msg[:300]}")
 
-        # 4. Log
+        # 4. Mini-analysis: ask the LLM to reflect on this iteration's outcome.
+        # Curriculum steps 10-12 are exploitation ("Exploit best ...", "Final
+        # ... refinement"); everything else is exploration. The two analyses
+        # ask different questions because they have different goals.
+        prev_best_f1, _ = get_best(experiments)
+        is_exploitation = (
+            assigned_family.startswith("Exploit")
+            or "refinement" in assigned_family.lower()
+        )
+        analysis_template = (
+            ITERATION_ANALYSIS_EXPLOITATION_TEMPLATE if is_exploitation
+            else ITERATION_ANALYSIS_EXPLORATION_TEMPLATE
+        )
+        iter_analysis_prompt = analysis_template.format(
+            n=successful_iterations,
+            architecture=architecture,
+            assigned_family=assigned_family,
+            status=status,
+            f1_str=f"{f1:.4f}" if f1 is not None else "N/A",
+            best_f1=prev_best_f1,
+            learning_curve=learning_curve or "(none)",
+            error=error_msg or "(none)",
+        )
+        print("  [llm] Requesting per-iteration analysis...")
+        iteration_analysis = call_llm(iter_analysis_prompt)
+        print(f"  [analysis] {iteration_analysis.strip()}")
+
+        # 5. Log
         add_experiment(LOG_PATH, {
             "architecture":  architecture,
             "f1":            f1,
@@ -310,10 +336,12 @@ def run_agent(max_iter: int = DEFAULT_MAX_ITER, target_f1: float = DEFAULT_TARGE
             "stdout":        result["stdout"][:2000],
             "prompt":        prompt_used,
             "learning_curve": learning_curve,
+            "iteration_analysis":        iteration_analysis,
+            "iteration_analysis_prompt": iter_analysis_prompt,
         })
         experiments = load_experiments(LOG_PATH)
 
-        # 5. Stopping criterion
+        # 6. Stopping criterion
         best_f1, best_exp = get_best(experiments)
         print(f"  [memory]   Best so far: F1={best_f1:.4f} "
               f"({best_exp['architecture'] if best_exp else 'none'})")
