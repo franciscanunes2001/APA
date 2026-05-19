@@ -229,3 +229,59 @@ Briefly answer (3-5 sentences total):
 2. Which approach worked best and why?
 3. What should be tried next to push F1 above {best_f1:.4f}?
 """
+
+ITERATION_ANALYSIS_EXPLORATION_TEMPLATE = """You just ran experiment #{n} for the disaster tweet classifier.
+The agent is currently in the EXPLORATION phase — different curriculum
+families are being sampled to map the design space. The point is NOT to
+beat the previous best; it is to characterise this family.
+
+## ARCHITECTURE:
+{architecture}
+
+## ASSIGNED FAMILY:
+{assigned_family}
+
+## OUTCOME:
+status = {status}
+val_f1 = {f1_str}
+best so far across all families = {best_f1:.4f}  (FYI only — do not frame this as a race)
+learning curve (Keras epochs, if any): {learning_curve}
+error (if failed): {error}
+
+## YOUR TASK
+In 3-4 sentences, characterise what this experiment told us about THIS family:
+1. Did the architecture train cleanly, overfit, underfit, or fail?
+2. What does its F1 suggest about this family's *capacity* on this dataset
+   (relative to other families already tried, NOT to the single best score)?
+3. Which design choice inside this family looks worth revisiting later in the
+   exploitation phase?
+
+Do NOT recommend switching to a different family — the curriculum controls that.
+Do NOT propose code. Do NOT use markdown headings. Plain prose only.
+"""
+
+ITERATION_ANALYSIS_EXPLOITATION_TEMPLATE = """You just ran experiment #{n} for the disaster tweet classifier.
+The agent is currently in the EXPLOITATION phase — the goal IS to beat the
+previous best F1 by refining the strongest family found so far.
+
+## ARCHITECTURE:
+{architecture}
+
+## ASSIGNED FAMILY:
+{assigned_family}
+
+## OUTCOME:
+status = {status}
+val_f1 = {f1_str}
+previous best F1 = {best_f1:.4f}
+learning curve (Keras epochs, if any): {learning_curve}
+error (if failed): {error}
+
+## YOUR TASK
+In 3-4 sentences, reflect on this refinement attempt:
+1. Did it work as expected? Why or why not?
+2. Was it an improvement, a regression, or roughly flat vs. the previous best?
+3. What single hyperparameter or design choice should the next iteration tweak?
+
+Do NOT propose code. Do NOT use markdown headings. Plain prose only.
+"""
