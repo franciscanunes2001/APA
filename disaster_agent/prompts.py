@@ -44,6 +44,11 @@ KERAS GOTCHAS (the agent has crashed on these before - pay attention):
   - MultiHeadAttention should use the Functional API, not Sequential.
   - Tokenizer must be fit only on X_tr_text.
   - Keep Keras fit(..., verbose=0) so logs remain readable.
+  - When chaining Conv1D into a recurrent layer (GRU, BiGRU, LSTM, BiLSTM):
+    use MaxPooling1D(pool_size=2) — NOT GlobalMaxPooling1D — before the
+    recurrent layer. GRU/LSTM expect 3D input (batch, time, features);
+    GlobalMaxPooling1D collapses time to 2D and crashes the recurrent layer
+    with "Input ... incompatible with the layer: expected ndim=3".
 
 EVALUATION - read this carefully:
   - val_f1 = f1_score(y_val, y_pred_val)
@@ -113,16 +118,31 @@ Standard linear baseline on bag-of-ngrams features for binary text classificatio
 """
 
 PROPOSE_PROMPT_TEMPLATE = SYSTEM_PROMPT + """
-## EXPERIMENT HISTORY (last {n} runs):
+## EXPERIMENT HISTORY (stratified — best runs overall + every run in the assigned family):
 {history}
 
 ## CURRENT BEST F1: {best_f1:.4f}
-## ALL ARCHITECTURES TRIED: {tried_list}
+## ALL ARCHITECTURES TRIED (names only): {tried_list}
+
+## RUNS ALREADY ATTEMPTED IN THE ASSIGNED FAMILY (with hparam signatures):
+{tried_in_family}
+Treat the hparam signatures above as the ground truth of what has been tried.
+Do NOT propose a config whose hparam signature is a near-duplicate of any of
+these — varying only random_state, max_iter, or a comment does not count.
+
+## VARIATION AXES ALREADY EXPLORED IN THIS FAMILY (with counts):
+{axes_in_family}
+You MUST pick a variation_axis that is NOT the most-repeated entry above.
+Repeating the dominant axis is the single biggest failure mode of this agent.
+If "(none declared)" dominates, prior runs did not disclose their axis — pick
+an axis that is clearly distinct from the hparam signatures listed above.
 
 ## ARCHITECTURES THAT FAILED OR TIMED OUT (do not retry exactly):
 {failed_list}
 
-## ARCHITECTURES THAT RAN BUT SCORED LOW (avoid tiny tweaks):
+## ARCHITECTURES THAT RAN BUT SCORED LOW (avoid tiny tweaks; this list now
+## INCLUDES weak runs in the currently-assigned family — those are the ones
+## you most need to diverge from):
 {low_scoring_list}
 
 ## YOUR TASK
@@ -193,11 +213,19 @@ TF-IDF-specific:
   - LogisticRegression C: choose between 0.1, 0.5, 1.0, 5.0, 10.0
   - class_weight: try 'balanced' or {{0: 1.0, 1: 1.5}} or {{0: 1.0, 1: 2.0}}
 
-OUTPUT FORMAT (follow EXACTLY - first three lines of your response):
+OUTPUT FORMAT (follow EXACTLY - first four lines of your response):
 Line 1: architecture name with no markdown, no quotes, no labels
 Line 2: one short sentence on why it should beat F1={best_f1:.4f}
-Line 3: blank
-Line 4+: the ```python ... ``` code block
+Line 3: VARIATION_AXIS: <single dimension you are varying vs. the closest
+        prior run in this family>
+        Pick ONE token, lowercase, underscores ok. Examples (not exhaustive):
+        dropout, embedding_dim, batch_size, patience, maxlen, learning_rate,
+        optimizer, vocab_size, class_weight, ngram_range, max_features, C,
+        kernel, hidden_units, recurrent_dropout, l2, architecture_topology.
+        This MUST differ from the dominant axis listed under "VARIATION AXES
+        ALREADY EXPLORED IN THIS FAMILY" above.
+Line 4: blank
+Line 5+: the ```python ... ``` code block
 """
 
 FIX_PROMPT_TEMPLATE = SYSTEM_PROMPT + """
