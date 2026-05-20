@@ -21,11 +21,11 @@ For each iteration the agent:
    captures stdout / stderr.
 4. If the script crashes, asks the LLM to fix it (up to 3 retries).
 5. Parses the validation F1 from a `RESULT: f1=0.XXXX` line and logs
-   everything to `experiments_v2.json` — including the full prompt and,
+   everything to `experiments.json` — including the full prompt and,
    for Keras runs, the per-epoch learning curve.
-6. After all iterations, plots an F1-progression chart (`results.png`),
-   asks the LLM for a written analysis (`analysis_v2.txt`), and
-   regenerates `submission.csv` from the best model.
+6. After all iterations, asks the LLM for a written analysis
+   (`analysis.txt`) and regenerates `submission.csv` from the best model.
+(Note) The correct folder is disaster_agent (not the disaster_agent_v2, as this was a previous model we used and discarded but kept it in the code so you could see our methedology and process)
 
 ---
 
@@ -34,7 +34,7 @@ For each iteration the agent:
 ### 1. Install Python dependencies
 
 ```bash
-pip install -r requirements_v2.txt
+pip install -r requirements.txt
 ```
 
 ### 2. Install Ollama and pull a model
@@ -70,6 +70,7 @@ APA/
 └── ...
 ```
 
+
 ---
 
 ## Run the agent
@@ -77,11 +78,11 @@ APA/
 A single command runs the whole pipeline:
 
 ```bash
-AGENT_MODEL=qwen2.5-coder:7b python -m disaster_agent.agent_v2 --max-iter 12
+AGENT_MODEL=qwen2.5-coder:7b python run_agent.py --max-iter 12
 ```
 
 Flags:
-- `--max-iter N` — number of experiment iterations (default 12)
+- `--max-iter N` — number of experiment iterations (default 10)
 - `--target-f1 F` — informational target F1 (default 0.82)
 
 Useful environment variables:
@@ -95,12 +96,11 @@ Useful environment variables:
 
 After a run you get:
 
-| File                  | Contents                                                        |
-| --------------------- | --------------------------------------------------------------- |
-| `experiments_v2.json` | Full log of every experiment (prompt, code, F1, learning curve) |
-| `results.png`         | F1-per-iteration chart with failed runs marked                  |
-| `analysis_v2.txt`     | LLM-written analysis of the run                                 |
-| `submission.csv`      | Kaggle submission generated from the best model                 |
+| File               | Contents                                                        |
+| ------------------ | --------------------------------------------------------------- |
+| `experiments.json` | Full log of every experiment (prompt, code, F1, learning curve) |
+| `analysis.txt`     | LLM-written analysis of the run                                 |
+| `submission.csv`   | Kaggle submission generated from the best model                 |
 
 ---
 
@@ -108,15 +108,11 @@ After a run you get:
 
 ```
 disaster_agent/
-├── agent_v2.py        # main loop, curriculum, propose/fix/log, plot_results
-├── executor_v2.py     # sandboxed subprocess runner + Keras epoch-logger preamble
-├── llm_v2.py          # Ollama OpenAI-compatible client
-├── memory_v2.py       # experiments_v2.json read/write + history helpers
-├── parser_v2.py       # extract code / architecture / F1 / learning curve
-├── prompts_v2.py      # prompt templates incl. minimal Keras template
-└── submission_v2.py   # Kaggle submission generation
+├── agent.py        # main loop, curriculum, propose/fix/log
+├── executor.py     # sandboxed subprocess runner + Keras epoch-logger preamble
+├── llm.py          # Ollama OpenAI-compatible client
+├── memory.py       # experiments.json read/write + history helpers
+├── parser.py       # extract code / architecture / F1 / learning curve
+├── prompts.py      # prompt templates incl. phase-aware iteration analysis
+└── submission.py   # Kaggle submission generation
 ```
-
-The non-`_v2` files (`agent.py`, `executor.py`, ...) are the original
-versions and act as a fallback. You can switch between them by changing
-the import in `run_agent.py`.
