@@ -9,15 +9,5 @@ __pycache__/
 .venv/
 venv/
 
-# Large data files — download separately via Kaggle
-train.csv
-test.csv
-sample_submission.csv
-submission.csv
-
-# Agent outputs that change every run
-experiments.json
-analysis.txt
-
 # Jupyter checkpoints
 .ipynb_checkpoints/
