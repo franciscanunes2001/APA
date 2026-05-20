@@ -14,7 +14,7 @@ from typing import Optional
 from openai import OpenAI, APIConnectionError, APIError
 
 # ── Configuration ────────────────────────────────────────────────────────────
-MODEL_NAME      = os.environ.get("AGENT_MODEL", "gemma4:latest")
+MODEL_NAME = os.environ.get("AGENT_MODEL", "qwen2.5-coder:14b")
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/v1")
 TEMPERATURE     = float(os.environ.get("AGENT_TEMP", "0.3"))
 # 8192 gives qwen2.5-coder and similar verbose models headroom to write
