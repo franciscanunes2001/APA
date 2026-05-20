@@ -1,0 +1,112 @@
+[
+  {
+    "architecture": "TF-IDF + LogisticRegression",
+    "f1": 0.7693,
+    "status": "success",
+    "error": null,
+    "code": "import pandas as pd\nfrom sklearn.feature_extraction.text import TfidfVectorizer\nfrom sklearn.linear_model import LogisticRegression\nfrom sklearn.model_selection import train_test_split\nfrom sklearn.metrics import f1_score\n\n# Load data\ntrain = pd.read_csv(f\"{DATA_DIR}/train.csv\")\ntest  = pd.read_csv(f\"{DATA_DIR}/test.csv\")\n\n# Build features\nX_train_text = make_features(train)\nX_test_text  = make_features(test)\n\n# Split data\nX_train, X_val, y_train, y_val = train_test_split(X_train_text, train['target'], test_size=0.2, random_state=42, stratify=train['target'])\n\n# Vectorize features\ntfidf_vectorizer = TfidfVectorizer(max_features=10000, ngram_range=(1, 2), sublinear_tf=True)\nX_train_tfidf = tfidf_vectorizer.fit_transform(X_train)\nX_val_tfidf = tfidf_vectorizer.transform(X_val)\nX_test_tfidf = tfidf_vectorizer.transform(X_test_text)\n\n# Train model\nlogreg = LogisticRegression(C=1.0, max_iter=1000, class_weight='balanced', solver='saga')\nlogreg.fit(X_train_tfidf, y_train)\n\n# Predict and evaluate\ny_pred_val = logreg.predict(X_val_tfidf)\nval_f1 = f1_score(y_val, y_pred_val)\n\n# Save submission\n_sub = pd.read_csv(f\"{DATA_DIR}/sample_submission.csv\")\n_sub['target'] = logreg.predict(X_test_tfidf).astype(int)\n_sub.to_csv(f\"{DATA_DIR}/submission.csv\", index=False)\n\nprint(f\"RESULT: f1={val_f1:.4f}\")",
+    "llm_rationale": "Simple and effective baseline using TF-IDF vectorization and Logistic Regression.",
+    "stdout": "RESULT: f1=0.7693\n",
+    "experiment_id": 1,
+    "timestamp": "2026-05-10T11:11:21.603158+00:00"
+  },
+  {
+    "architecture": "TF-IDF + ComplementNB",
+    "f1": 0.7823,
+    "status": "success",
+    "error": null,
+    "code": "from sklearn.feature_extraction.text import TfidfVectorizer\nfrom sklearn.naive_bayes import ComplementNB\nfrom sklearn.model_selection import train_test_split\nfrom sklearn.metrics import f1_score\n\n# Load data\nimport pandas as pd\ntrain = pd.read_csv(f\"{DATA_DIR}/train.csv\")\ntest  = pd.read_csv(f\"{DATA_DIR}/test.csv\")\n\n# Build features\nX_train_text = make_features(train)\nX_test_text  = make_features(test)\n\n# Vectorize text\nvectorizer = TfidfVectorizer()\nX_train = vectorizer.fit_transform(X_train_text)\nX_test = vectorizer.transform(X_test_text)\n\n# Split data\ny = train['target']\nX_train, X_val, y_train, y_val = train_test_split(X_train, y, test_size=0.2, stratify=y, random_state=42)\n\n# Train model\nmodel = ComplementNB(alpha=0.5)\nmodel.fit(X_train, y_train)\n\n# Predict and evaluate\ny_pred_val = model.predict(X_val)\nval_f1 = f1_score(y_val, y_pred_val)\n\n# Save submission\n_sub = pd.read_csv(f\"{DATA_DIR}/sample_submission.csv\")\n_sub['target'] = model.predict(X_test).astype(int)\n_sub.to_csv(f\"{DATA_DIR}/submission.csv\", index=False)\n\nprint(f\"RESULT: f1={val_f1:.4f}\")",
+    "llm_rationale": "Complement Naive Bayes is known to perform well on imbalanced datasets, which could help improve the model's performance compared to Logistic Regression.",
+    "stdout": "RESULT: f1=0.7823\n",
+    "experiment_id": 2,
+    "timestamp": "2026-05-10T11:12:14.213128+00:00"
+  },
+  {
+    "architecture": "TF-IDF + ComplementNB (alpha=0.5)",
+    "f1": 0.7826,
+    "status": "success",
+    "error": null,
+    "code": "from sklearn.feature_extraction.text import TfidfVectorizer\nfrom sklearn.naive_bayes import ComplementNB\nfrom sklearn.metrics import f1_score\n\n# Load data\nimport pandas as pd\ntrain = pd.read_csv(f\"{DATA_DIR}/train.csv\")\ntest  = pd.read_csv(f\"{DATA_DIR}/test.csv\")\n\n# Build features\nX_train_text = make_features(train)\nX_test_text  = make_features(test)\n\n# Split data\nfrom sklearn.model_selection import train_test_split\nX_train, X_val, y_train, y_val = train_test_split(X_train_text, train['target'], test_size=0.2, random_state=42, stratify=train['target'])\n\n# Vectorize text\nvectorizer = TfidfVectorizer()\nX_train_vec = vectorizer.fit_transform(X_train)\nX_val_vec   = vectorizer.transform(X_val)\nX_test_vec  = vectorizer.transform(X_test_text)\n\n# Train model\nmodel = ComplementNB(alpha=0.5)\nmodel.fit(X_train_vec, y_train)\n\n# Predict and evaluate\ny_pred_val = model.predict(X_val_vec)\nval_f1 = f1_score(y_val, y_pred_val)\n\n# Save submission\n_sub = pd.read_csv(f\"{DATA_DIR}/sample_submission.csv\")\n_sub['target'] = model.predict(X_test_vec).astype(int)\n_sub.to_csv(f\"{DATA_DIR}/submission.csv\", index=False)\n\nprint(f\"RESULT: f1={val_f1:.4f}\")",
+    "llm_rationale": "Complement Naive Bayes can handle imbalanced datasets well and might perform better than Logistic Regression or SGDClassifier on this specific task.",
+    "stdout": "RESULT: f1=0.7826\n",
+    "experiment_id": 3,
+    "timestamp": "2026-05-10T11:13:10.085803+00:00"
+  },
+  {
+    "architecture": "TF-IDF + SGDClassifier (loss='modified_huber', NO n_jobs)",
+    "f1": 0.7601,
+    "status": "success",
+    "error": null,
+    "code": "import pandas as pd\nfrom sklearn.feature_extraction.text import TfidfVectorizer\nfrom sklearn.linear_model import SGDClassifier\nfrom sklearn.model_selection import train_test_split\nfrom sklearn.metrics import f1_score\n\ntrain = pd.read_csv(f\"{DATA_DIR}/train.csv\")\ntest  = pd.read_csv(f\"{DATA_DIR}/test.csv\")\n\nX_train_text = make_features(train)\ny_train = train['target']\n\nX_train, X_val, y_train, y_val = train_test_split(X_train_text, y_train, test_size=0.2, stratify=y_train, random_state=42)\n\nvectorizer = TfidfVectorizer()\nX_train_tfidf = vectorizer.fit_transform(X_train)\nX_val_tfidf = vectorizer.transform(X_val)\nX_test_tfidf = vectorizer.transform(make_features(test))\n\nmodel = SGDClassifier(loss='modified_huber', class_weight={0: 1.0, 1: 1.5}, max_iter=1000, tol=None)\nmodel.fit(X_train_tfidf, y_train)\n\ny_pred_val = model.predict(X_val_tfidf)\nval_f1 = f1_score(y_val, y_pred_val)\n\n_sub = pd.read_csv(f\"{DATA_DIR}/sample_submission.csv\")\n_sub['target'] = model.predict(X_test_tfidf).astype(int)\n_sub.to_csv(f\"{DATA_DIR}/submission.csv\", index=False)\n\nprint(f\"RESULT: f1={val_f1:.4f}\")",
+    "llm_rationale": "SGDClassifier with a modified Huber loss function can handle imbalanced datasets well and might perform better than Logistic Regression or RidgeClassifier on this specific task.",
+    "stdout": "RESULT: f1=0.7601\n",
+    "experiment_id": 4,
+    "timestamp": "2026-05-10T11:13:32.553612+00:00"
+  },
+  {
+    "architecture": "TF-IDF + RandomForestClassifier (n_estimators=200, class_weight='balanced', n_jobs=-1)",
+    "f1": null,
+    "status": "failed",
+    "error": "Traceback (most recent call last):\n  File \"/var/folders/32/_76qlh155hsdr8l3px5sbgd80000gn/T/agent_exp_trb6c_pa.py\", line 59, in <module>\n    model.fit(X_train, y_train)\n    ~~~~~~~~~^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sklearn/base.py\", line 1336, in wrapper\n    return fit_method(estimator, *args, **kwargs)\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sklearn/ensemble/_forest.py\", line 359, in fit\n    X, y = validate_data(\n           ~~~~~~~~~~~~~^\n        self,\n        ^^^^^\n    ...<5 lines>...\n        ensure_all_finite=False,\n        ^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sklearn/utils/validation.py\", line 2919, in validate_data\n    X, y = check_X_y(X, y, **check_params)\n           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/si",
+    "code": "import pandas as pd\nfrom sklearn.feature_extraction.text import TfidfVectorizer\nfrom sklearn.ensemble import RandomForestClassifier\nfrom sklearn.model_selection import train_test_split, StratifiedKFold\nfrom sklearn.metrics import f1_score\n\n# Load data\ntrain = pd.read_csv(f\"{DATA_DIR}/train.csv\")\ntest  = pd.read_csv(f\"{DATA_DIR}/test.csv\")\n\n# Build features\nX_train_text = make_features(train)\nX_test_text  = make_features(test)\n\n# Split data into training and validation sets\nX_train, X_val, y_train, y_val = train_test_split(X_train_text, train['target'], test_size=0.2, stratify=train['target'], random_state=42)\n\n# Initialize model\nmodel = RandomForestClassifier(n_estimators=200, class_weight='balanced', n_jobs=-1, random_state=42)\n\n# Train model\nmodel.fit(X_train, y_train)\n\n# Make predictions on validation set\ny_pred_val = model.predict(X_val)\n\n# Calculate F1 score\nval_f1 = f1_score(y_val, y_pred_val)\n\n# Save submission\n_sub = pd.read_csv(f\"{DATA_DIR}/sample_submission.csv\")\n_sub['target'] = model.predict(X_test_text).astype(int)\n_sub.to_csv(f\"{DATA_DIR}/submission.csv\", index=False)\n\nprint(f\"RESULT: f1={val_f1:.4f}\")",
+    "llm_rationale": "RandomForestClassifier can handle imbalanced datasets well and might perform better than Logistic Regression or SGDClassifier on this specific task.",
+    "stdout": "",
+    "experiment_id": 5,
+    "timestamp": "2026-05-10T11:14:50.881682+00:00"
+  },
+  {
+    "architecture": "TF-IDF + RidgeClassifier (alpha=1.0, class_weight='balanced', NO n_jobs)",
+    "f1": 0.7796,
+    "status": "success",
+    "error": null,
+    "code": "import pandas as pd\nfrom sklearn.feature_extraction.text import TfidfVectorizer\nfrom sklearn.linear_model import RidgeClassifier\nfrom sklearn.model_selection import train_test_split\nfrom sklearn.metrics import f1_score\n\n# Load data\ntrain = pd.read_csv(f\"{DATA_DIR}/train.csv\")\ntest  = pd.read_csv(f\"{DATA_DIR}/test.csv\")\n\n# Build features\nX_train_text = make_features(train)\nX_test_text  = make_features(test)\n\n# Split data\nX_train, X_val, y_train, y_val = train_test_split(X_train_text, train['target'], test_size=0.2, random_state=42, stratify=train['target'])\n\n# Vectorize text\nvectorizer = TfidfVectorizer()\nX_train_vec = vectorizer.fit_transform(X_train)\nX_val_vec = vectorizer.transform(X_val)\nX_test_vec = vectorizer.transform(X_test_text)\n\n# Train RidgeClassifier\nridge_clf = RidgeClassifier(alpha=1.0, class_weight='balanced', max_iter=1000)\nridge_clf.fit(X_train_vec, y_train)\n\n# Predict and evaluate\ny_pred_val = ridge_clf.predict(X_val_vec)\nval_f1 = f1_score(y_val, y_pred_val)\n\n# Save submission\n_sub = pd.read_csv(f\"{DATA_DIR}/sample_submission.csv\")\n_sub['target'] = ridge_clf.predict(X_test_vec).astype(int)\n_sub.to_csv(f\"{DATA_DIR}/submission.csv\", index=False)\n\nprint(f\"RESULT: f1={val_f1:.4f}\")",
+    "llm_rationale": "RidgeClassifier can handle imbalanced datasets well and might perform better than Logistic Regression or SGDClassifier on this specific task.",
+    "stdout": "RESULT: f1=0.7796\n",
+    "experiment_id": 6,
+    "timestamp": "2026-05-10T11:16:21.361683+00:00"
+  },
+  {
+    "architecture": "TF-IDF + LogisticRegression (class_weight='balanced', n_jobs=-1)",
+    "f1": 0.771,
+    "status": "success",
+    "error": null,
+    "code": "from sklearn.feature_extraction.text import TfidfVectorizer\nfrom sklearn.linear_model import LogisticRegression\nfrom sklearn.model_selection import train_test_split\nfrom sklearn.metrics import f1_score\n\n# Load data\nimport pandas as pd\ntrain = pd.read_csv(f\"{DATA_DIR}/train.csv\")\ntest  = pd.read_csv(f\"{DATA_DIR}/test.csv\")\n\n# Build features\nX_train_text = make_features(train)\nX_test_text  = make_features(test)\n\n# Split data\nX_train, X_val, y_train, y_val = train_test_split(X_train_text, train['target'], test_size=0.2, random_state=42, stratify=train['target'])\n\n# Vectorize text\nvectorizer = TfidfVectorizer()\nX_train_vec = vectorizer.fit_transform(X_train)\nX_val_vec   = vectorizer.transform(X_val)\nX_test_vec  = vectorizer.transform(X_test_text)\n\n# Train model\nmodel = LogisticRegression(class_weight='balanced', max_iter=1000)\nmodel.fit(X_train_vec, y_train)\n\n# Predict and evaluate\ny_pred_val = model.predict(X_val_vec)\nval_f1 = f1_score(y_val, y_pred_val)\n\n# Save submission\n_sub = pd.read_csv(f\"{DATA_DIR}/sample_submission.csv\")\n_sub['target'] = model.predict(X_test_vec).astype(int)\n_sub.to_csv(f\"{DATA_DIR}/submission.csv\", index=False)\n\nprint(f\"RESULT: f1={val_f1:.4f}\")",
+    "llm_rationale": "Logistic Regression with balanced class weights and parallel processing can improve performance on imbalanced datasets.",
+    "stdout": "RESULT: f1=0.7710\n",
+    "experiment_id": 7,
+    "timestamp": "2026-05-10T11:17:10.598372+00:00"
+  },
+  {
+    "architecture": "Keras Embedding + 1D CNN",
+    "f1": 0.7327,
+    "status": "success",
+    "error": null,
+    "code": "import pandas as pd\nfrom sklearn.feature_extraction.text import TfidfVectorizer\nfrom sklearn.model_selection import train_test_split\nfrom sklearn.metrics import f1_score\nfrom tensorflow.keras.preprocessing.text import Tokenizer\nfrom tensorflow.keras.preprocessing.sequence import pad_sequences\nfrom tensorflow.keras.models import Sequential\nfrom tensorflow.keras.layers import Embedding, Conv1D, GlobalMaxPooling1D, Dense\n\n# Load data\ntrain = pd.read_csv(f\"{DATA_DIR}/train.csv\")\ntest  = pd.read_csv(f\"{DATA_DIR}/test.csv\")\n\n# Build features\nX_train_text = make_features(train)\nX_test_text  = make_features(test)\n\n# Split data\ny = train['target']\nX_train, X_val, y_train, y_val = train_test_split(X_train_text, y, test_size=0.2, random_state=42, stratify=y)\n\n# Tokenize and pad sequences\ntokenizer = Tokenizer(num_words=10000)\ntokenizer.fit_on_texts(X_train)\nX_train_seq = tokenizer.texts_to_sequences(X_train)\nX_val_seq = tokenizer.texts_to_sequences(X_val)\nX_test_seq = tokenizer.texts_to_sequences(X_test_text)\n\nmaxlen = 100\nX_train_pad = pad_sequences(X_train_seq, maxlen=maxlen, padding='post', truncating='post')\nX_val_pad = pad_sequences(X_val_seq, maxlen=maxlen, padding='post', truncating='post')\nX_test_pad = pad_sequences(X_test_seq, maxlen=maxlen, padding='post', truncating='post')\n\n# Build model\nmodel = Sequential([\n    Embedding(input_dim=10000, output_dim=64, input_length=maxlen),\n    Conv1D(filters=128, kernel_size=3, activation='relu'),\n    GlobalMaxPooling1D(),\n    Dense(1, activation='sigmoid')\n])\n\n# Compile model\nmodel.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])\n\n# Train model\nhistory = model.fit(X_train_pad, y_train, epochs=5, batch_size=32, validation_data=(X_val_pad, y_val), class_weight={0: 1.0, 1: 1.5}, verbose=0)\n\n# Predict and evaluate\ny_pred_val = (model.predict(X_val_pad) > 0.5).astype(int)\nval_f1 = f1_score(y_val, y_pred_val)\n\n# Save submission\n_sub = pd.read_csv(f\"{DATA_DIR}/sample_submission.csv\")\n_sub['target'] = model.predict(X_test_pad) > 0.5\n_sub.to_csv(f\"{DATA_DIR}/submission.csv\", index=False)\n\nprint(f\"RESULT: f1={val_f1:.4f}\")",
+    "llm_rationale": "This architecture should perform better than the current best because Convolutional Neural Networks (CNNs) are effective at capturing local patterns in text, which can be beneficial for binary classification tasks like this one. Additionally, using Keras allows for easy implementation and tuning of hyperparameters.",
+    "stdout": "\n\u001b[1m 1/48\u001b[0m \u001b[37m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m \u001b[1m1s\u001b[0m 33ms/step\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\n\u001b[1m48/48\u001b[0m \u001b[32m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m\u001b[37m\u001b[0m \u001b[1m0s\u001b[0m 1ms/step \b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\n\u001b[1m48/48\u001b[0m \u001b[32m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m\u001b[37m\u001b[0m \u001b[1m0s\u001b[0m 2ms/step\n\n\u001b[1m  1/102\u001b[0m \u001b[37m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m \u001b[1m0s\u001b[0m 7ms/step\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\n\u001b[1m 63/102\u001b[0m \u001b[32m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m\u001b[37m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m \u001b[1m0s\u001b[0m 808us/step\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\n\u001b[1m102/102\u001b[0m \u001b[32m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m\u001b[37m\u001b[0m \u001b[1m0s\u001b[0m 866us/step\nRESULT: f1=0.7327\n",
+    "experiment_id": 8,
+    "timestamp": "2026-05-10T11:18:03.911470+00:00"
+  },
+  {
+    "architecture": "TF-IDF + ComplementNB (alpha=0.5)",
+    "f1": 0.7826,
+    "status": "success",
+    "error": null,
+    "code": "from sklearn.feature_extraction.text import TfidfVectorizer\nfrom sklearn.naive_bayes import ComplementNB\nfrom sklearn.metrics import f1_score\n\n# Load data\nimport pandas as pd\ntrain = pd.read_csv(f\"{DATA_DIR}/train.csv\")\ntest  = pd.read_csv(f\"{DATA_DIR}/test.csv\")\n\n# Build features\nX_train_text = make_features(train)\nX_test_text  = make_features(test)\n\n# Split data\nfrom sklearn.model_selection import train_test_split\nX_train, X_val, y_train, y_val = train_test_split(X_train_text, train['target'], test_size=0.2, random_state=42, stratify=train['target'])\n\n# Vectorize text\nvectorizer = TfidfVectorizer()\nX_train_vec = vectorizer.fit_transform(X_train)\nX_val_vec = vectorizer.transform(X_val)\nX_test_vec = vectorizer.transform(X_test_text)\n\n# Train ComplementNB\nclf = ComplementNB(alpha=0.5)\nclf.fit(X_train_vec, y_train)\n\n# Predict and evaluate\ny_pred_val = clf.predict(X_val_vec)\nval_f1 = f1_score(y_val, y_pred_val)\n\n# Save submission\n_sub = pd.read_csv(f\"{DATA_DIR}/sample_submission.csv\")\n_sub['target'] = clf.predict(X_test_vec).astype(int)\n_sub.to_csv(f\"{DATA_DIR}/submission.csv\", index=False)\n\nprint(f\"RESULT: f1={val_f1:.4f}\")",
+    "llm_rationale": "Complement Naive Bayes is particularly effective for imbalanced datasets and can handle text data well, making it a strong candidate to improve upon the current best F1 score.",
+    "stdout": "RESULT: f1=0.7826\n",
+    "experiment_id": 9,
+    "timestamp": "2026-05-10T11:19:09.385474+00:00"
+  },
+  {
+    "architecture": "TF-IDF + ComplementNB (alpha=0.5)",
+    "f1": 0.7826,
+    "status": "success",
+    "error": null,
+    "code": "from sklearn.feature_extraction.text import TfidfVectorizer\nfrom sklearn.naive_bayes import ComplementNB\nfrom sklearn.metrics import f1_score\n\n# Load data\nimport pandas as pd\ntrain = pd.read_csv(f\"{DATA_DIR}/train.csv\")\ntest  = pd.read_csv(f\"{DATA_DIR}/test.csv\")\n\n# Build features\nX_train_text = make_features(train)\nX_test_text  = make_features(test)\n\n# Split data\nfrom sklearn.model_selection import train_test_split\nX_train, X_val, y_train, y_val = train_test_split(X_train_text, train['target'], test_size=0.2, stratify=train['target'], random_state=42)\n\n# Vectorize text\nvectorizer = TfidfVectorizer()\nX_train_vec = vectorizer.fit_transform(X_train)\nX_val_vec = vectorizer.transform(X_val)\nX_test_vec = vectorizer.transform(X_test_text)\n\n# Train model\nmodel = ComplementNB(alpha=0.5)\nmodel.fit(X_train_vec, y_train)\n\n# Predict and evaluate\ny_pred_val = model.predict(X_val_vec)\nval_f1 = f1_score(y_val, y_pred_val)\n\n# Save submission\n_sub = pd.read_csv(f\"{DATA_DIR}/sample_submission.csv\")\n_sub['target'] = model.predict(X_test_vec).astype(int)\n_sub.to_csv(f\"{DATA_DIR}/submission.csv\", index=False)\n\nprint(f\"RESULT: f1={val_f1:.4f}\")",
+    "llm_rationale": "Complement Naive Bayes is particularly effective for imbalanced datasets and can handle text data well, making it a strong candidate to improve upon the current best F1 score.",
+    "stdout": "RESULT: f1=0.7826\n",
+    "experiment_id": 10,
+    "timestamp": "2026-05-10T11:20:14.244263+00:00"
+  }
+]

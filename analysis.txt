@@ -1,0 +1,9 @@
+1. The results show a consistent pattern where attempts to refine the best-performing models (Keras Embedding + CNN + GRU hybrid) through hyperparameter tuning (e.g., dropout, batch size, embedding dimension) have resulted in performance regressions rather than improvements. This suggests that further adjustments or alternative approaches may be needed.
+
+2. The Keras Embedding + CNN + GRU hybrid approach worked best with an F1 score of 0.7920. Its success can be attributed to its ability to effectively capture both local and global features from the text data using convolutional layers and recurrent neural networks, respectively.
+
+3. To push the F1 score above 0.7920, one should consider exploring more advanced architectures or techniques such as:
+   - Incorporating attention mechanisms to better focus on important parts of the input.
+   - Experimenting with different types of pre-trained embeddings (e.g., BERT, GPT) and fine-tuning them for the specific task.
+   - Combining multiple models using ensemble methods to leverage diverse strengths.
+   - Investigating transfer learning approaches that utilize pre-trained models on similar tasks.

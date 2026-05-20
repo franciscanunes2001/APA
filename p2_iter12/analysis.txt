@@ -1,0 +1,5 @@
+1. The results show that using ComplementNB with an alpha value of 0.5 consistently performs well, achieving an F1 score of 0.7826 across multiple experiments. Additionally, RandomForestClassifier and SGDClassifier also performed reasonably well, particularly when using balanced class weights or specific loss functions.
+
+2. ComplementNB worked best because it is specifically designed to handle imbalanced text data effectively, which is a common characteristic in disaster tweet classification tasks. The consistent high F1 scores achieved with ComplementNB indicate that it can efficiently separate the classes despite the imbalance in the dataset.
+
+3. To push the F1 score above 0.7826, one could try combining multiple models using ensemble techniques such as stacking or voting. Additionally, experimenting with different hyperparameters for the RandomForestClassifier and SGDClassifier could lead to improved performance. It might also be beneficial to explore other classifiers that are known to perform well on imbalanced datasets, such as XGBoost or LightGBM, and tune their parameters accordingly.
