@@ -14,16 +14,21 @@ from .parser import (
     extract_architecture_name,
     extract_f1,
     extract_learning_curve,
+    extract_variation_axis,
 )
 from .executor import run_code, execution_succeeded
 from .memory import (
     load_experiments,
     add_experiment,
     get_best,
+    get_best_in_family,
     get_tried_architectures,
     format_history_for_prompt,
+    format_history_stratified_for_prompt,
     format_failed_for_prompt,
     format_low_scoring_for_prompt,
+    format_tried_in_family_for_prompt,
+    format_variation_axes_in_family_for_prompt,
 )
 from .prompts import (
     FIRST_EXPERIMENT_PROMPT,
@@ -163,14 +168,20 @@ def _propose_experiment(
         response = call_llm(prompt_used)
     else:
         best_f1, best_exp = get_best(experiments)
-        history_str = format_history_for_prompt(experiments, n=len(experiments))
+        history_str = format_history_stratified_for_prompt(
+            experiments, family=assigned_family,
+        )
         tried_list  = ", ".join(get_tried_architectures(experiments))
         failed_list = format_failed_for_prompt(experiments)
-        # Exclude the currently-assigned family from the "avoid tiny tweaks"
-        # warning — otherwise the LLM gets contradictory orders ("MUST
-        # implement family X" + "avoid tiny tweaks on past attempts in X").
-        low_scoring_list = format_low_scoring_for_prompt(
-            experiments, exclude_family=assigned_family,
+        # Include the assigned family in the low-scoring warning. The previous
+        # exclusion hid the very signal — weak runs in the current family —
+        # that should push the LLM to diverge instead of re-tweaking.
+        low_scoring_list = format_low_scoring_for_prompt(experiments)
+        tried_in_family = format_tried_in_family_for_prompt(
+            experiments, assigned_family,
+        )
+        axes_in_family = format_variation_axes_in_family_for_prompt(
+            experiments, assigned_family,
         )
 
         prompt_used = PROPOSE_PROMPT_TEMPLATE.format(
@@ -178,9 +189,34 @@ def _propose_experiment(
             history=history_str,
             best_f1=best_f1,
             tried_list=tried_list,
+            tried_in_family=tried_in_family,
+            axes_in_family=axes_in_family,
             failed_list=failed_list,
             low_scoring_list=low_scoring_list,
         )
+        # For exploit/refinement steps, pick the base model deterministically
+        # and inject its full code into the prompt. Without this, the LLM has
+        # only architecture names and F1 scores in the history — it cannot see
+        # the hyperparameters it is supposed to "change one at a time".
+        base_exp = None
+        base_f1 = 0.0
+        knobs = ""
+        if assigned_family.startswith("Exploit best classical"):
+            base_f1, base_exp = get_best_in_family(experiments, "classical")
+            knobs = "C, max_features, ngram_range, class_weight, sublinear_tf"
+        elif assigned_family.startswith("Exploit best deep-learning"):
+            base_f1, base_exp = get_best_in_family(experiments, "deep_learning")
+            knobs = "dropout rate, embedding dim, batch_size, patience, maxlen"
+        elif "refinement" in assigned_family.lower():
+            base_f1, base_exp = get_best(experiments)
+            if base_exp is not None:
+                from .memory import _is_deep_learning
+                knobs = (
+                    "dropout rate, embedding dim, batch_size, patience, maxlen"
+                    if _is_deep_learning(base_exp)
+                    else "C, max_features, ngram_range, class_weight, sublinear_tf"
+                )
+
         prompt_used += f"""
 
 IMPORTANT - CONTROLLER ASSIGNED FAMILY:
@@ -190,24 +226,34 @@ For this experiment, you MUST implement exactly this architecture family:
 
 The current best model overall is: {best_exp['architecture'] if best_exp else 'none yet'} with F1={best_f1:.4f}
 
-For "Exploit best classical family": ignore the overall best if it uses Keras Embedding.
-Base your implementation on the best TF-IDF based model found so far.
-
-For "Exploit best deep-learning family": ignore the overall best if it uses TF-IDF.
-Base your implementation on the best Keras Embedding model found so far.
-BEST KERAS EMBEDDING MODEL SO FAR: look in the experiment history above and find
-the highest F1 among models using Keras Embedding layers — use THAT as your base.
-
 Do NOT switch to a different architecture family than assigned.
-
-Do NOT choose another family.
 Do NOT write the family name as the architecture name. Line 1 must be the
 actual concrete architecture implemented, for example "TF-IDF + ComplementNB"
 or "Keras Embedding + CNN + GRU".
 During exploration, prioritize diversity of architecture families.
 During exploitation/refinement, change only ONE meaningful design choice at a time.
-EXPLOITATION WARNING: do NOT add extra Dense layers — this causes overfitting on 
+EXPLOITATION WARNING: do NOT add extra Dense layers — this causes overfitting on
 small datasets. Instead tune: batch_size, dropout rate, embedding dim, or patience.
+"""
+
+        if base_exp is not None:
+            prompt_used += f"""
+## BASE MODEL TO REFINE (this is the script you must start from)
+Experiment #{base_exp['experiment_id']} ({base_exp['architecture']}) achieved
+F1={base_f1:.4f} and is the deterministic baseline for this iteration.
+
+Copy the script below VERBATIM, then change EXACTLY ONE of:
+  {knobs}
+
+Do NOT alter imports, data loading, the train/val split, evaluation logic, or
+the submission/RESULT lines. Only the single hyperparameter you choose to tune
+may differ from the baseline. On line 1 of your response, name the architecture
+and indicate the single value you changed (e.g. "TF-IDF + LinearSVC (C=1.0)"
+or "Keras Embedding + 1D CNN (dropout=0.5)").
+
+```python
+{(base_exp.get('code') or '').strip()}
+```
 """
         print(f"  [llm] Requesting experiment: {assigned_family}")
         response = call_llm(prompt_used)
@@ -242,12 +288,22 @@ def run_agent(max_iter: int = DEFAULT_MAX_ITER, target_f1: float = DEFAULT_TARGE
         print(f"  Family:       {assigned_family}")
         print(f"  Architecture: {architecture}")
 
-        # Optional rationale
+        # Optional rationale + the structured variation_axis the propose
+        # prompt now requires. The rationale parser skips lines containing
+        # "VARIATION_AXIS" so the axis declaration doesn't get logged as
+        # the rationale by accident.
         rationale_lines = [
             l.strip() for l in response.splitlines()
-            if l.strip() and not l.strip().startswith("#") and "```" not in l
+            if l.strip()
+            and not l.strip().startswith("#")
+            and "```" not in l
+            and not l.strip().upper().startswith("VARIATION_AXIS")
+            and not l.strip().upper().startswith("VARIATION AXIS")
         ]
         llm_rationale = rationale_lines[1] if len(rationale_lines) > 1 else ""
+        variation_axis = extract_variation_axis(response)
+        if variation_axis:
+            print(f"  Variation axis: {variation_axis}")
 
         if code is None:
             print("  [parser] No code block found in LLM response. Retrying without counting.")
@@ -259,6 +315,7 @@ def run_agent(max_iter: int = DEFAULT_MAX_ITER, target_f1: float = DEFAULT_TARGE
                 "assigned_family": assigned_family,
                 "code":          "",
                 "llm_rationale": llm_rationale,
+                "variation_axis": variation_axis,
                 "stdout":        "",
                 "prompt":        prompt_used,
                 "learning_curve": [],
@@ -333,11 +390,10 @@ def run_agent(max_iter: int = DEFAULT_MAX_ITER, target_f1: float = DEFAULT_TARGE
             "assigned_family": assigned_family,
             "code":          final_code,
             "llm_rationale": llm_rationale,
-            "stdout":        result["stdout"][:2000],
+            "variation_axis": variation_axis,
             "prompt":        prompt_used,
             "learning_curve": learning_curve,
-            "iteration_analysis":        iteration_analysis,
-            "iteration_analysis_prompt": iter_analysis_prompt,
+            "iteration_analysis": iteration_analysis,
         })
         experiments = load_experiments(LOG_PATH)
 

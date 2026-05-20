@@ -146,6 +146,31 @@ def extract_f1(output: str) -> Optional[float]:
     return None
 
 
+_VARIATION_AXIS_RE = re.compile(
+    r"VARIATION[_\s-]?AXIS\s*[:=]\s*([^\n\r]+)",
+    re.IGNORECASE,
+)
+
+
+def extract_variation_axis(response: str) -> str:
+    """
+    Pull the `VARIATION_AXIS: <name>` declaration that the propose prompt now
+    requires. Returns the axis as a lowercase token (e.g. "dropout",
+    "embedding_dim", "ngram_range"). Empty string if the LLM omitted it.
+    """
+    if not response:
+        return ""
+    cleaned = _strip_think_blocks(response)
+    match = _VARIATION_AXIS_RE.search(cleaned)
+    if not match:
+        return ""
+    axis = match.group(1).strip()
+    axis = axis.strip("\"'`*_").strip()
+    # Cut at first period or stray markdown — the LLM sometimes appends prose
+    axis = re.split(r"[.;()\[\]]", axis, 1)[0].strip()
+    return axis.lower()[:60]
+
+
 _EPOCH_LINE_RE = re.compile(
     r"EPOCH_METRIC\s+epoch=(\d+)\s+loss=([0-9.eE+-]+)\s+val_loss=([0-9.eE+-]+)"
 )

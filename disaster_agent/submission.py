@@ -39,7 +39,10 @@ _texts = (_kw + ' ' + _txt).str.strip().tolist()
 
 from tensorflow.keras.preprocessing.sequence import pad_sequences as _pad
 _seqs  = tokenizer.texts_to_sequences(_texts)
-_X     = _pad(_seqs, maxlen=MAX_LEN, padding='post', truncating='post')
+# maxlen=40 matches the value mandated by the propose-prompt for every
+# Keras script, so this is safe regardless of whether the original script
+# bound MAX_LEN to a global.
+_X     = _pad(_seqs, maxlen=40, padding='post', truncating='post')
 _preds = (model.predict(_X, verbose=0).ravel() > 0.5).astype(int)
 _sub['target'] = _preds
 _sub.to_csv(f"{DATA_DIR}/submission.csv", index=False)
