@@ -4,6 +4,8 @@ University project for Advanced Predictive Analytics 2025/2026, Track A - NLP wi
 
 The agent runs locally through an Ollama OpenAI-compatible API. It does not use cloud LLM calls or external API keys.
 
+For reproduction, we recommend `qwen2.5-coder:14b`, which was the validated model used for the final reported autonomous run. The code is model-agnostic through `AGENT_MODEL`, but other Ollama models may require prompt or timeout adjustments.
+
 ## How It Works
 
 For each iteration, the agent:
@@ -34,12 +36,10 @@ Install Ollama from https://ollama.com. It provides a local OpenAI-compatible AP
 http://localhost:11434/v1
 ```
 
-Pull at least one code-capable local model, for example:
+Pull the validated reproduction model:
 
 ```bash
-ollama pull qwen2.5-coder:7b
 ollama pull qwen2.5-coder:14b
-ollama pull gemma4:latest
 ```
 
 Make sure the Ollama server is running:
@@ -62,11 +62,7 @@ APA/
 
 ## Run the Agent
 
-The main entry point is `run_agent.py`:
-
-```bash
-python run_agent.py --max-iter 10 --target-f1 0.99
-```
+The main entry point is `run_agent.py`. For reproduction, set `AGENT_MODEL` to the validated Qwen model.
 
 On macOS/Linux, set the local LLM model like this:
 
@@ -85,7 +81,7 @@ python run_agent.py --max-iter 10 --target-f1 0.99
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `AGENT_MODEL` | Ollama model tag used by the agent | `gemma4:latest` |
+| `AGENT_MODEL` | Ollama model tag used by the agent | Recommended: `qwen2.5-coder:14b` |
 | `AGENT_TEMP` | LLM sampling temperature | `0.3` |
 | `AGENT_MAX_TOKENS` | Maximum tokens requested from the LLM | `8192` |
 | `OLLAMA_URL` | Ollama OpenAI-compatible base URL | `http://localhost:11434/v1` |
